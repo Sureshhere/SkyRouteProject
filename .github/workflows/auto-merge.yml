@@ -5,6 +5,11 @@ on:
     branches: [ develop ]
     types: [ opened, synchronize, reopened ]
 
+permissions:
+  pull-requests: write
+  contents: write
+  checks: read
+
 jobs:
   auto-merge:
     name: Auto Merge to Develop
