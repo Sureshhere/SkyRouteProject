@@ -5,12 +5,14 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.Tokens;
 using SkyRoute.Application.DTOs.Auth;
+using SkyRoute.Application.DTOs.Flight;
 using SkyRoute.Application.Interfaces;
 using SkyRoute.Application.Services;
 using SkyRoute.Application.Validators;
 using SkyRoute.Infrastructure.Authentication;
 using SkyRoute.Infrastructure.Data;
 using SkyRoute.Infrastructure.Data.Repositories;
+using SkyRoute.Infrastructure.Pricing;
 using System.Text;
 
 namespace SkyRoute.Infrastructure.Configurations;
@@ -26,6 +28,11 @@ public static class DependencyInjection
         // Repositories
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IAirportRepository, AirportRepository>();
+        services.AddScoped<IFlightRepository, FlightRepository>();
+
+        // Pricing Strategies (Strategy Pattern)
+        services.AddSingleton<IFlightPricingStrategy, GlobalAirPricingStrategy>();
+        services.AddSingleton<IFlightPricingStrategy, BudgetWingsPricingStrategy>();
 
         // Authentication
         services.Configure<JwtSettings>(configuration.GetSection("JwtSettings"));
@@ -38,7 +45,9 @@ public static class DependencyInjection
     {
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IAirportService, AirportService>();
+        services.AddScoped<IFlightSearchService, FlightSearchService>();
         services.AddScoped<IValidator<RegisterRequestDto>, RegisterRequestValidator>();
+        services.AddScoped<IValidator<FlightSearchRequestDto>, FlightSearchValidator>();
 
         return services;
     }
