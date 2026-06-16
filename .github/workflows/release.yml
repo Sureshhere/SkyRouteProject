@@ -1,0 +1,35 @@
+name: Release to Main
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  tag-release:
+    name: Tag Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build & Test on Main
+        run: |
+          dotnet restore Backend/SkyRoute.slnx
+          dotnet build Backend/SkyRoute.slnx --no-restore --configuration Release
+          dotnet test Backend/SkyRoute.slnx --no-build --configuration Release
+
+      - name: Create release summary
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const sha = context.sha.substring(0, 7);
+            const date = new Date().toISOString().split('T')[0];
+            core.info(`Release merged to main — commit ${sha} on ${date}`);
