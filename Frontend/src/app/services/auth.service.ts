@@ -7,9 +7,10 @@ import { AuthResponse, RegisterRequest, LoginRequest } from '../models';
   providedIn: 'root'
 })
 export class AuthService {
-  private apiUrl = 'http://localhost:5000/api/auth';
+  private apiUrl = 'http://localhost:5235/api/auth';
   isAuthenticated = signal(false);
   userEmail = signal<string | null>(null);
+  userFullName = signal<string | null>(null);
 
   private tokenSubject = new BehaviorSubject<string | null>(null);
 
@@ -18,6 +19,7 @@ export class AuthService {
     if (token) {
       this.isAuthenticated.set(true);
       this.userEmail.set(localStorage.getItem('email'));
+      this.userFullName.set(localStorage.getItem('fullName'));
       this.tokenSubject.next(token);
     }
   }
@@ -37,8 +39,10 @@ export class AuthService {
   logout(): void {
     localStorage.removeItem('token');
     localStorage.removeItem('email');
+    localStorage.removeItem('fullName');
     this.isAuthenticated.set(false);
     this.userEmail.set(null);
+    this.userFullName.set(null);
     this.tokenSubject.next(null);
   }
 
@@ -49,8 +53,10 @@ export class AuthService {
   private handleAuthResponse(res: AuthResponse): void {
     localStorage.setItem('token', res.token);
     localStorage.setItem('email', res.email);
+    localStorage.setItem('fullName', res.fullName);
     this.isAuthenticated.set(true);
     this.userEmail.set(res.email);
+    this.userFullName.set(res.fullName);
     this.tokenSubject.next(res.token);
   }
 }

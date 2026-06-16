@@ -10,14 +10,14 @@
       "prefix": "app",
       "architect": {
         "build": {
-          "builder": "@angular-devkit/build-angular:browser",
+          "builder": "@angular-devkit/build-angular:application",
           "options": {
             "outputPath": "dist/skyroute",
             "index": "src/index.html",
-            "main": "src/main.ts",
+            "browser": "src/main.ts",
             "polyfills": ["zone.js"],
             "tsConfig": "tsconfig.app.json",
-            "assets": ["src/favicon.ico", "src/assets"],
+            "assets": [],
             "styles": ["src/styles.css"],
             "scripts": []
           },
@@ -33,29 +33,32 @@
               "outputHashing": "all"
             },
             "development": {
-              "buildOptimizer": false,
               "optimization": false,
-              "vendorChunk": true,
               "extractLicenses": false,
-              "sourceMap": true,
-              "namedChunks": true
+              "sourceMap": true
             }
           },
           "defaultConfiguration": "production"
         },
         "serve": {
           "builder": "@angular-devkit/build-angular:dev-server",
+          "options": {
+            "buildTarget": "skyroute:build"
+          },
           "configurations": {
             "production": {
-              "browserTarget": "skyroute:build:production"
+              "buildTarget": "skyroute:build:production"
             },
             "development": {
-              "browserTarget": "skyroute:build:development"
+              "buildTarget": "skyroute:build:development"
             }
           },
           "defaultConfiguration": "development"
         }
       }
     }
+  },
+  "cli": {
+    "analytics": "1b442965-8df8-476a-81a6-2e2f246b1b43"
   }
 }

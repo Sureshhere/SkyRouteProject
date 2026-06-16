@@ -1,122 +1,98 @@
-import { Component, signal, OnInit, effect } from '@angular/core';
+import { Component, signal, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormBuilder, FormGroup, Validators, FormArray } from '@angular/forms';
 import { Router } from '@angular/router';
-import { BookingService } from '../../services/booking.service';
-import { FlightService } from '../../services/flight.service';
-import { FlightResult, Airport } from '../../models';
+import { BookingService } from '../services/booking.service';
+import { FlightService } from '../services/flight.service';
+import { FlightResult } from '../models';
 
 @Component({
   selector: 'app-booking',
   standalone: true,
   imports: [CommonModule, ReactiveFormsModule],
   template: `
-    <div class="container">
-      <div class="page-container">
-        <h2>Complete Your Booking</h2>
+    <div class="booking-page">
+      <h2 style="font-size: 22px; font-weight: 700; margin-bottom: 20px; color: var(--text);">Complete Your Booking</h2>
 
-        <div class="alert alert-error" *ngIf="error()">
-          {{ error() }}
-        </div>
+      <div class="alert alert-error" *ngIf="error()">
+        {{ error() }}
+      </div>
 
-        <div class="card" *ngIf="flight()" style="margin-bottom: 30px; background: #f9fafb;">
-          <h3 style="margin-top: 0;">Flight Summary</h3>
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
-            <div>
-              <strong>{{ flight()!.airline }}</strong><br>
-              {{ flightService.formatTime(flight()!.departureTime) }} - {{ flightService.formatTime(flight()!.arrivalTime) }}
-            </div>
-            <div style="text-align: right;">
-              <strong style="font-size: 18px; color: #1e3a8a;">{{ flightService.formatPrice(flight()!.totalPrice) }}</strong><br>
-              <small>{{ flightService.formatPrice(flight()!.pricePerPassenger) }}/person</small>
-            </div>
+      <div class="booking-flight-summary" *ngIf="flight()">
+        <div class="booking-flight-info">
+          <div class="b-airline">{{ flight()!.airlineName }} · {{ flight()!.flightNumber }}</div>
+          <div class="b-route">
+            {{ flight()!.originCode }} {{ flightService.formatTime(flight()!.departureTime) }}
+            → {{ flight()!.destinationCode }} {{ flightService.formatTime(flight()!.arrivalTime) }}
+            · {{ flight()!.cabinClass }} · {{ getDuration(flight()!.durationMinutes) }}
           </div>
         </div>
+        <div class="booking-price-box">
+          <div class="b-price">USD {{ flight()!.pricing.totalPrice.toFixed(2) }}</div>
+          <div class="b-price-small">USD {{ flight()!.pricing.pricePerPassenger.toFixed(2) }} / person</div>
+        </div>
+      </div>
 
-        <form [formGroup]="form" (ngSubmit)="submitBooking()" *ngIf="form">
-          <div class="card">
-            <h3>Passenger Details</h3>
+      <form [formGroup]="form" (ngSubmit)="submitBooking()" *ngIf="form">
+        <div class="passenger-section">
+          <div class="passenger-heading">Passenger Details</div>
 
-            <div formArrayName="passengers" *ngIf="passengersArray">
-              <div *ngFor="let passenger of passengersArray.controls; let i = index" 
-                   [formGroupName]="i"
-                   style="margin-bottom: 30px; padding-bottom: 20px; border-bottom: 1px solid #e5e7eb;">
-                <h4>Passenger {{ i + 1 }}</h4>
+          <div formArrayName="passengers">
+            <div *ngFor="let passenger of passengersArray.controls; let i = index"
+                 [formGroupName]="i">
+              <div class="passenger-tag">Passenger {{ i + 1 }}</div>
 
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
-                  <div class="form-group">
-                    <label>First Name</label>
-                    <input type="text" formControlName="firstName" placeholder="John">
-                    <div class="error" *ngIf="passenger.get('firstName')?.hasError('required') && passenger.get('firstName')?.touched">
-                      Required
-                    </div>
-                  </div>
-
-                  <div class="form-group">
-                    <label>Last Name</label>
-                    <input type="text" formControlName="lastName" placeholder="Doe">
-                    <div class="error" *ngIf="passenger.get('lastName')?.hasError('required') && passenger.get('lastName')?.touched">
-                      Required
-                    </div>
-                  </div>
+              <div class="form-group">
+                <label>Full Name</label>
+                <input type="text" formControlName="fullName" placeholder="e.g. John Doe">
+                <div class="error" *ngIf="passenger.get('fullName')?.hasError('required') && passenger.get('fullName')?.touched">
+                  Full name is required
                 </div>
+              </div>
 
-                <div class="form-group">
-                  <label>Email</label>
-                  <input type="email" formControlName="email" placeholder="john@example.com">
-                  <div class="error" *ngIf="passenger.get('email')?.hasError('required') && passenger.get('email')?.touched">
-                    Required
-                  </div>
+              <div class="form-group">
+                <label>Email Address</label>
+                <input type="email" formControlName="email" placeholder="e.g. john@example.com">
+                <div class="error" *ngIf="passenger.get('email')?.hasError('required') && passenger.get('email')?.touched">
+                  Email address is required
                 </div>
+                <div class="error" *ngIf="passenger.get('email')?.hasError('email') && passenger.get('email')?.touched">
+                  Please enter a valid email address (e.g. john@example.com)
+                </div>
+              </div>
 
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
-                  <div class="form-group">
-                    <label>Document Type</label>
-                    <select formControlName="documentType">
-                      <option value="NationalId" *ngIf="!isDomesticRoute()">National ID</option>
-                      <option value="PassportNumber" *ngIf="isDomesticRoute()">Passport</option>
-                      <option value="NationalId">National ID</option>
-                      <option value="PassportNumber">Passport</option>
-                    </select>
-                  </div>
-
-                  <div class="form-group">
-                    <label>Document Number</label>
-                    <input type="text" formControlName="documentNumber" 
-                           [placeholder]="getDocumentPlaceholder(passenger.get('documentType')?.value)">
-                    <div class="error" *ngIf="passenger.get('documentNumber')?.hasError('required') && passenger.get('documentNumber')?.touched">
-                      Required
-                    </div>
-                    <div class="error" *ngIf="passenger.get('documentNumber')?.hasError('pattern') && passenger.get('documentNumber')?.touched">
-                      Invalid format
-                    </div>
-                  </div>
+              <div class="form-group">
+                <label>Document Number</label>
+                <input type="text" formControlName="documentNumber" placeholder="e.g. AB1234567 or P9876543">
+                <div class="error" *ngIf="passenger.get('documentNumber')?.hasError('required') && passenger.get('documentNumber')?.touched">
+                  Document number is required
+                </div>
+                <div class="error" *ngIf="passenger.get('documentNumber')?.hasError('pattern') && passenger.get('documentNumber')?.touched">
+                  Must be 6–12 alphanumeric characters (passport or national ID number)
                 </div>
               </div>
             </div>
           </div>
+        </div>
 
-          <div style="display: flex; gap: 10px; margin-top: 30px;">
-            <button type="submit" [disabled]="!form.valid || loading()" 
-                    style="flex: 1; padding: 12px;">
-              {{ loading() ? 'Processing...' : 'Confirm Booking' }}
-            </button>
-            <button type="button" class="btn-secondary" (click)="goBack()" style="padding: 12px;">
-              Back
-            </button>
-          </div>
-        </form>
-      </div>
+        <div class="booking-actions">
+          <button type="submit" class="btn-confirm" [disabled]="!form.valid || loading()">
+            {{ loading() ? 'Processing...' : 'Confirm Booking' }}
+          </button>
+          <button type="button" class="btn-secondary" (click)="goBack()" style="padding: 13px 24px;">
+            ← Back
+          </button>
+        </div>
+      </form>
     </div>
   `
 })
 export class BookingComponent implements OnInit {
   form!: FormGroup;
   flight = signal<FlightResult | null>(null);
-  originAirport = signal<Airport | null>(null);
-  destAirport = signal<Airport | null>(null);
   loading = signal(false);
   error = signal<string | null>(null);
+  departureDate = '';
 
   get passengersArray() {
     return this.form?.get('passengers') as FormArray;
@@ -130,48 +106,34 @@ export class BookingComponent implements OnInit {
   ) {}
 
   ngOnInit(): void {
-    const state = this.router.getCurrentNavigation()?.extras.state;
+    const state = history.state;
     if (!state?.flight) {
       this.router.navigate(['/flights']);
       return;
     }
 
     const flight = state.flight as FlightResult;
+    const search = state.search;
     this.flight.set(flight);
-    this.initializeForm(flight);
+    this.departureDate = search?.departureDate || new Date().toISOString().split('T')[0];
+    const numPassengers = search?.numberOfPassengers || 1;
+    this.initializeForm(numPassengers);
   }
 
-  private initializeForm(flight: FlightResult): void {
-    const numPassengers = 1; // Get from search state if needed
-    const passengersGroup = this.fb.array(
-      Array.from({ length: numPassengers }, () =>
-        this.createPassengerGroup()
-      )
-    );
-
+  private initializeForm(numPassengers: number): void {
     this.form = this.fb.group({
-      passengers: passengersGroup
+      passengers: this.fb.array(
+        Array.from({ length: numPassengers }, () => this.createPassengerGroup())
+      )
     });
   }
 
   private createPassengerGroup(): FormGroup {
     return this.fb.group({
-      firstName: ['', Validators.required],
-      lastName: ['', Validators.required],
+      fullName: ['', Validators.required],
       email: ['', [Validators.required, Validators.email]],
-      documentType: ['NationalId', Validators.required],
       documentNumber: ['', [Validators.required, Validators.pattern(/^[A-Za-z0-9]{6,12}$/)]]
     });
-  }
-
-  isDomesticRoute(): boolean {
-    // Simplified - in real app, would check airport country codes
-    return true;
-  }
-
-  getDocumentPlaceholder(docType?: string): string {
-    if (docType === 'PassportNumber') return 'ABC123456';
-    return 'ID12345678';
   }
 
   submitBooking(): void {
@@ -181,9 +143,8 @@ export class BookingComponent implements OnInit {
     this.error.set(null);
 
     const booking = {
-      flightId: this.flight()!.flightId,
-      departureDate: new Date().toISOString().split('T')[0], // Get from search state
-      numberOfPassengers: this.passengersArray.length,
+      flightId: this.flight()!.id,
+      departureDate: this.departureDate,
       passengers: this.passengersArray.value
     };
 
@@ -191,14 +152,26 @@ export class BookingComponent implements OnInit {
       next: (confirmation) => {
         this.router.navigate(['/confirmation'], { state: { confirmation } });
       },
-      error: (err) => {
+      error: (err: any) => {
         this.loading.set(false);
-        this.error.set(err.error?.message || 'Booking failed');
+        if (err.status === 401) {
+          this.error.set('Your session has expired. Please log in again to continue.');
+        } else if (Array.isArray(err.error?.errors) && err.error.errors.length > 0) {
+          this.error.set(err.error.errors.join(' '));
+        } else {
+          this.error.set(err.error?.error || err.error?.message || 'Booking failed. Please try again.');
+        }
       }
     });
   }
 
   goBack(): void {
     this.router.navigate(['/results']);
+  }
+
+  getDuration(minutes: number): string {
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    return `${hours}h ${mins}m`;
   }
 }

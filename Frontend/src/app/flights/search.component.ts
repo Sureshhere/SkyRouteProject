@@ -1,82 +1,116 @@
-import { Component, signal, effect, OnInit } from '@angular/core';
+import { Component, signal, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { ReactiveFormsModule, FormBuilder, FormGroup, Validators, AbstractControl, ValidationErrors } from '@angular/forms';
 import { Router } from '@angular/router';
-import { FlightService } from '../../services/flight.service';
-import { Airport } from '../../models';
+import { FlightService } from '../services/flight.service';
+import { Airport } from '../models';
+
+function sameAirportValidator(control: AbstractControl): ValidationErrors | null {
+  const origin = control.get('originAirportCode')?.value;
+  const destination = control.get('destinationAirportCode')?.value;
+  if (origin && destination && origin === destination) {
+    return { sameAirport: true };
+  }
+  return null;
+}
+
+function pastDateValidator(control: AbstractControl): ValidationErrors | null {
+  const value = control.value;
+  if (!value) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  if (new Date(value) < today) {
+    return { pastDate: true };
+  }
+  return null;
+}
 
 @Component({
   selector: 'app-flight-search',
   standalone: true,
   imports: [CommonModule, ReactiveFormsModule],
   template: `
-    <div class="container">
-      <div class="page-container">
-        <h2>Search Flights</h2>
-
-        <div class="alert alert-error" *ngIf="error()">
-          {{ error() }}
+    <div class="search-hero">
+      <div class="container">
+        <div class="hero-content">
+          <h1 class="hero-title">✈ Find Your Perfect Flight</h1>
+          <p class="hero-subtitle">Search and compare fares from GlobalAir and BudgetWings</p>
         </div>
 
-        <div class="card">
+        <div class="search-card">
+          <div class="alert alert-error" *ngIf="error()">
+            {{ error() }}
+          </div>
+
           <form [formGroup]="form" (ngSubmit)="search()">
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px;">
-              <div class="form-group">
+            <div class="search-form-row">
+              <div class="form-group" style="margin-bottom: 0;">
                 <label>From</label>
-                <select formControlName="originCode">
-                  <option value="">Select origin...</option>
+                <select formControlName="originAirportCode">
+                  <option value="">Select departure airport</option>
                   <option *ngFor="let airport of airports()" [value]="airport.code">
-                    {{ airport.code }} - {{ airport.city }}
+                    {{ airport.code }} — {{ airport.city }}
                   </option>
                 </select>
-                <div class="error" *ngIf="form.get('originCode')?.hasError('required') && form.get('originCode')?.touched">
-                  Origin is required
+                <div class="error" *ngIf="form.get('originAirportCode')?.hasError('required') && form.get('originAirportCode')?.touched">
+                  Please select your departure airport
                 </div>
               </div>
 
-              <div class="form-group">
+              <div class="form-group" style="margin-bottom: 0;">
                 <label>To</label>
-                <select formControlName="destinationCode">
-                  <option value="">Select destination...</option>
+                <select formControlName="destinationAirportCode">
+                  <option value="">Select destination airport</option>
                   <option *ngFor="let airport of airports()" [value]="airport.code">
-                    {{ airport.code }} - {{ airport.city }}
+                    {{ airport.code }} — {{ airport.city }}
                   </option>
                 </select>
-                <div class="error" *ngIf="form.get('destinationCode')?.hasError('required') && form.get('destinationCode')?.touched">
-                  Destination is required
+                <div class="error" *ngIf="form.get('destinationAirportCode')?.hasError('required') && form.get('destinationAirportCode')?.touched">
+                  Please select your destination airport
                 </div>
               </div>
 
-              <div class="form-group">
+              <div class="form-group" style="margin-bottom: 0;">
                 <label>Departure Date</label>
-                <input type="date" formControlName="departureDate">
+                <input type="date" formControlName="departureDate" [attr.min]="minDate">
                 <div class="error" *ngIf="form.get('departureDate')?.hasError('required') && form.get('departureDate')?.touched">
-                  Date is required
+                  Please select a departure date
+                </div>
+                <div class="error" *ngIf="form.get('departureDate')?.hasError('pastDate') && form.get('departureDate')?.touched">
+                  Departure date cannot be in the past
                 </div>
               </div>
 
-              <div class="form-group">
+              <div class="form-group" style="margin-bottom: 0;">
                 <label>Passengers</label>
                 <input type="number" formControlName="numberOfPassengers" min="1" max="9">
-                <div class="error" *ngIf="form.get('numberOfPassengers')?.hasError('required') && form.get('numberOfPassengers')?.touched">
-                  Passengers required
+                <div class="error" *ngIf="form.get('numberOfPassengers')?.hasError('min') && form.get('numberOfPassengers')?.touched">
+                  At least 1 passenger is required
+                </div>
+                <div class="error" *ngIf="form.get('numberOfPassengers')?.hasError('max') && form.get('numberOfPassengers')?.touched">
+                  Maximum 9 passengers allowed
                 </div>
               </div>
 
-              <div class="form-group">
+              <div class="form-group" style="margin-bottom: 0;">
                 <label>Cabin Class</label>
                 <select formControlName="cabinClass">
-                  <option value="Economy">Economy</option>
-                  <option value="Business">Business</option>
-                  <option value="FirstClass">First Class</option>
+                  <option [value]="1">Economy</option>
+                  <option [value]="2">Business</option>
+                  <option [value]="3">First Class</option>
                 </select>
               </div>
 
-              <div style="display: flex; align-items: flex-end;">
-                <button type="submit" [disabled]="!form.valid || loading()" style="width: 100%;">
+              <div class="form-group" style="margin-bottom: 0;">
+                <label style="visibility: hidden;">Search</label>
+                <button type="submit" class="btn-search" [disabled]="!form.valid || loading()">
                   {{ loading() ? 'Searching...' : 'Search Flights' }}
                 </button>
               </div>
+            </div>
+
+            <div class="search-form-error" *ngIf="form.hasError('sameAirport') && form.get('destinationAirportCode')?.dirty">
+              Origin and destination cannot be the same airport — please select two different airports
             </div>
           </form>
         </div>
@@ -90,14 +124,18 @@ export class FlightSearchComponent implements OnInit {
   loading = signal(false);
   error = signal<string | null>(null);
 
+  get minDate(): string {
+    return new Date().toISOString().split('T')[0];
+  }
+
   constructor(private fb: FormBuilder, private flightService: FlightService, private router: Router) {
     this.form = this.fb.group({
-      originCode: ['', Validators.required],
-      destinationCode: ['', Validators.required],
-      departureDate: ['', Validators.required],
+      originAirportCode: ['', Validators.required],
+      destinationAirportCode: ['', Validators.required],
+      departureDate: ['', [Validators.required, pastDateValidator]],
       numberOfPassengers: [1, [Validators.required, Validators.min(1), Validators.max(9)]],
-      cabinClass: ['Economy']
-    });
+      cabinClass: [1]
+    }, { validators: sameAirportValidator });
   }
 
   ngOnInit(): void {
@@ -107,7 +145,7 @@ export class FlightSearchComponent implements OnInit {
   loadAirports(): void {
     this.flightService.getAirports().subscribe({
       next: (data) => this.airports.set(data),
-      error: (err) => this.error.set('Failed to load airports')
+      error: () => this.error.set('Unable to load airports. Please refresh the page and try again.')
     });
   }
 
@@ -119,17 +157,24 @@ export class FlightSearchComponent implements OnInit {
 
     this.flightService.searchFlights(this.form.value).subscribe({
       next: (res) => {
-        this.router.navigate(['/results'], { 
-          state: { 
+        this.router.navigate(['/results'], {
+          state: {
             flights: res.flights,
             search: this.form.value
           }
         });
       },
-      error: (err) => {
+      error: (err: any) => {
         this.loading.set(false);
-        this.error.set(err.error?.message || 'Search failed. Try again.');
+        this.error.set(this.extractError(err, 'Flight search failed. Please check your inputs and try again.'));
       }
     });
+  }
+
+  private extractError(err: any, fallback: string): string {
+    if (Array.isArray(err.error?.errors) && err.error.errors.length > 0) {
+      return err.error.errors.join(' ');
+    }
+    return err.error?.error || err.error?.message || fallback;
   }
 }

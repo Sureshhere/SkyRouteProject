@@ -7,7 +7,7 @@ import { Airport, FlightResult, FlightSearchRequest } from '../models';
   providedIn: 'root'
 })
 export class FlightService {
-  private apiUrl = 'http://localhost:5000/api';
+  private apiUrl = 'http://localhost:5235/api';
 
   constructor(private http: HttpClient) { }
 
@@ -24,32 +24,18 @@ export class FlightService {
 
     switch (sortBy) {
       case 'price-asc':
-        return sorted.sort((a, b) => a.totalPrice - b.totalPrice);
+        return sorted.sort((a, b) => a.pricing.totalPrice - b.pricing.totalPrice);
       case 'price-desc':
-        return sorted.sort((a, b) => b.totalPrice - a.totalPrice);
+        return sorted.sort((a, b) => b.pricing.totalPrice - a.pricing.totalPrice);
       case 'duration-asc':
-        return sorted.sort((a, b) => {
-          const durationA = this.getDuration(a.departureTime, a.arrivalTime);
-          const durationB = this.getDuration(b.departureTime, b.arrivalTime);
-          return durationA - durationB;
-        });
+        return sorted.sort((a, b) => a.durationMinutes - b.durationMinutes);
       case 'duration-desc':
-        return sorted.sort((a, b) => {
-          const durationA = this.getDuration(a.departureTime, a.arrivalTime);
-          const durationB = this.getDuration(b.departureTime, b.arrivalTime);
-          return durationB - durationA;
-        });
+        return sorted.sort((a, b) => b.durationMinutes - a.durationMinutes);
       case 'time-asc':
         return sorted.sort((a, b) => a.departureTime.localeCompare(b.departureTime));
       default:
         return sorted;
     }
-  }
-
-  private getDuration(departure: string, arrival: string): number {
-    const depTime = new Date(departure);
-    const arrTime = new Date(arrival);
-    return arrTime.getTime() - depTime.getTime();
   }
 
   formatPrice(price: number): string {

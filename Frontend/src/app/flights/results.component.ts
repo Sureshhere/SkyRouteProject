@@ -1,8 +1,8 @@
-import { Component, signal, effect, OnInit } from '@angular/core';
+import { Component, signal, computed, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
-import { FlightService } from '../../services/flight.service';
-import { FlightResult, SortOption } from '../../models';
+import { FlightService } from '../services/flight.service';
+import { FlightResult, SortOption } from '../models';
 
 @Component({
   selector: 'app-flight-results',
@@ -11,17 +11,21 @@ import { FlightResult, SortOption } from '../../models';
   template: `
     <div class="container">
       <div class="page-container">
-        <h2>Search Results</h2>
 
-        <div class="alert alert-info">
-          Found {{ displayedFlights().length }} flights
+        <div class="results-meta">
+          <span class="results-count">
+            <strong>{{ displayedFlights().length }}</strong> flights found
+          </span>
+          <button class="btn-secondary" (click)="goBack()" style="font-size: 13px; padding: 7px 16px;">
+            ← Modify Search
+          </button>
         </div>
 
         <div class="sort-controls">
-          <button *ngFor="let opt of sortOptions" 
+          <button *ngFor="let opt of sortOptions"
                   (click)="setSortBy(opt.value)"
                   [class.active]="sortBy() === opt.value"
-                  class="sort-btn">
+                  class="sort-chip">
             {{ opt.label }}
           </button>
         </div>
@@ -29,43 +33,51 @@ import { FlightResult, SortOption } from '../../models';
         <div *ngIf="!displayedFlights().length" class="empty-state">
           <h3>No flights found</h3>
           <p>Try adjusting your search criteria</p>
-          <button class="btn-secondary" (click)="goBack()">Back to Search</button>
+          <button class="btn-secondary" (click)="goBack()" style="margin-top: 16px;">Back to Search</button>
         </div>
 
-        <div class="grid" *ngIf="displayedFlights().length">
-          <div *ngFor="let flight of displayedFlights()" 
-               class="flight-card"
-               (click)="selectFlight(flight)">
-            <div class="flight-header">
-              <div>
-                <div class="airline">{{ flight.airline }}</div>
-                <div class="cabin-class">{{ flight.cabinClass }}</div>
+        <div class="flight-list" *ngIf="displayedFlights().length">
+          <div *ngFor="let flight of displayedFlights()" class="flight-row" (click)="selectFlight(flight)">
+
+            <div class="flight-airline">
+              <div class="airline-name">{{ flight.airlineName }}</div>
+              <div class="flight-number-badge">{{ flight.flightNumber }}</div>
+              <span class="cabin-badge">{{ flight.cabinClass }}</span>
+            </div>
+
+            <div class="flight-route">
+              <div class="route-point">
+                <div class="route-time">{{ flightService.formatTime(flight.departureTime) }}</div>
+                <div class="route-code">{{ flight.originCode }}</div>
               </div>
-              <div style="text-align: right;">
-                <div class="price">{{ flightService.formatPrice(flight.totalPrice) }}</div>
-                <div class="price-per-person">{{ flightService.formatPrice(flight.pricePerPassenger) }} per person</div>
+
+              <div class="route-timeline">
+                <div class="timeline-duration">{{ getDuration(flight.durationMinutes) }}</div>
+                <div class="timeline-bar">
+                  <div class="timeline-dot"></div>
+                  <div class="timeline-line"></div>
+                  <span class="timeline-plane">✈</span>
+                  <div class="timeline-line"></div>
+                  <div class="timeline-dot"></div>
+                </div>
+              </div>
+
+              <div class="route-point">
+                <div class="route-time">{{ flightService.formatTime(flight.arrivalTime) }}</div>
+                <div class="route-code">{{ flight.destinationCode }}</div>
               </div>
             </div>
 
-            <div class="flight-times">
-              <div>
-                <div class="time">{{ flightService.formatTime(flight.departureTime) }}</div>
-                <div style="font-size: 12px; color: #6b7280;">Depart</div>
-              </div>
-              <div class="duration">
-                {{ getDuration(flight.departureTime, flight.arrivalTime) }}
-              </div>
-              <div>
-                <div class="time">{{ flightService.formatTime(flight.arrivalTime) }}</div>
-                <div style="font-size: 12px; color: #6b7280;">Arrive</div>
-              </div>
+            <div class="flight-pricing">
+              <div class="price-total">{{ formatPrice(flight.pricing.totalPrice) }}</div>
+              <div class="price-per-pax">{{ formatPrice(flight.pricing.pricePerPassenger) }} / person</div>
+              <div class="pricing-rule-tag">{{ flight.pricing.pricingRule }}</div>
+              <button class="btn-select" (click)="$event.stopPropagation(); selectFlight(flight)">Select →</button>
             </div>
 
-            <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #f0f0f0;">
-              <small style="color: #6b7280;">{{ flight.pricingRule }}</small>
-            </div>
           </div>
         </div>
+
       </div>
     </div>
   `
@@ -73,7 +85,8 @@ import { FlightResult, SortOption } from '../../models';
 export class FlightResultsComponent implements OnInit {
   flights = signal<FlightResult[]>([]);
   sortBy = signal<string>('price-asc');
-  displayedFlights = signal<FlightResult[]>([]);
+  displayedFlights = computed(() => this.flightService.sortFlights(this.flights(), this.sortBy()));
+  searchParams: any = null;
   sortOptions: SortOption[] = [
     { label: 'Price: Low to High', value: 'price-asc' },
     { label: 'Price: High to Low', value: 'price-desc' },
@@ -82,17 +95,13 @@ export class FlightResultsComponent implements OnInit {
     { label: 'Departure: Earliest', value: 'time-asc' }
   ];
 
-  constructor(public flightService: FlightService, private router: Router) {
-    effect(() => {
-      const sorted = this.flightService.sortFlights(this.flights(), this.sortBy());
-      this.displayedFlights.set(sorted);
-    });
-  }
+  constructor(public flightService: FlightService, private router: Router) {}
 
   ngOnInit(): void {
-    const state = this.router.getCurrentNavigation()?.extras.state;
+    const state = history.state;
     if (state?.flights) {
       this.flights.set(state.flights);
+      this.searchParams = state.search;
     } else {
       this.router.navigate(['/flights']);
     }
@@ -102,17 +111,18 @@ export class FlightResultsComponent implements OnInit {
     this.sortBy.set(value);
   }
 
-  getDuration(departure: string, arrival: string): string {
-    const dep = new Date(departure);
-    const arr = new Date(arrival);
-    const ms = arr.getTime() - dep.getTime();
-    const hours = Math.floor(ms / (1000 * 60 * 60));
-    const minutes = Math.floor((ms % (1000 * 60 * 60)) / (1000 * 60));
-    return `${hours}h ${minutes}m`;
+  getDuration(minutes: number): string {
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    return `${hours}h ${mins}m`;
+  }
+
+  formatPrice(price: number): string {
+    return `USD ${price.toFixed(2)}`;
   }
 
   selectFlight(flight: FlightResult): void {
-    this.router.navigate(['/booking'], { state: { flight } });
+    this.router.navigate(['/booking'], { state: { flight, search: this.searchParams } });
   }
 
   goBack(): void {

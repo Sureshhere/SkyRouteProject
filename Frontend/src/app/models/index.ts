@@ -1,5 +1,7 @@
 export interface AuthResponse {
+  id: string;
   token: string;
+  expiresIn: number;
   email: string;
   fullName: string;
 }
@@ -25,52 +27,62 @@ export interface Airport {
 }
 
 export interface FlightResult {
-  flightId: string;
-  airline: string;
-  cabinClass: string;
+  id: string;
+  airlineName: string;
+  airlineCode: string;
+  flightNumber: string;
+  originCode: string;
+  destinationCode: string;
   departureTime: string;
   arrivalTime: string;
-  pricePerPassenger: number;
-  totalPrice: number;
-  pricingRule: string;
+  durationMinutes: number;
+  cabinClass: string;
+  pricing: {
+    baseFare: number;
+    pricePerPassenger: number;
+    totalPrice: number;
+    pricingRule: string;
+  };
 }
 
 export interface FlightSearchRequest {
-  originCode: string;
-  destinationCode: string;
+  originAirportCode: string;
+  destinationAirportCode: string;
   departureDate: string;
   numberOfPassengers: number;
-  cabinClass: string;
+  cabinClass: number;
 }
 
 export interface PassengerDetail {
-  firstName: string;
-  lastName: string;
+  fullName: string;
   email: string;
-  documentType: string;
   documentNumber: string;
 }
 
 export interface CreateBookingRequest {
   flightId: string;
   departureDate: string;
-  numberOfPassengers: number;
   passengers: PassengerDetail[];
 }
 
 export interface BookingConfirmation {
-  id: string;
+  bookingId: string;
   bookingReferenceCode: string;
-  flightId: string;
-  airline: string;
-  cabinClass: string;
-  departureTime: string;
-  arrivalTime: string;
-  departureDate: string;
-  numberOfPassengers: number;
-  totalPrice: number;
-  pricePerPassenger: number;
-  status: string;
+  flightDetails: {
+    airlineName: string;
+    flightNumber: string;
+    origin: string;
+    destination: string;
+    departureTime: string;
+    arrivalTime: string;
+    cabinClass: string;
+  };
+  pricing: {
+    totalPrice: number;
+    pricePerPassenger: number;
+    numberOfPassengers: number;
+  };
+  bookingStatus: string;
   createdAt: string;
 }
 
