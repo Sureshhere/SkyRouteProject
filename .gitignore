@@ -1,0 +1,43 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+*.vs/
+.vs/
+*.DotSettings.user
+TestResults/
+*.nupkg
+*.snupkg
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+## ASP.NET
+wwwroot/lib/
+appsettings.Development.json
+
+## Environment / Secrets
+.env
+.env.*
+appsettings.Local.json
+**/secrets.json
+
+## Logs
+*.log
+logs/
+
+## Node / Angular
+node_modules/
+dist/
+.angular/
+*.js.map
+
+## OS
+.DS_Store
+Thumbs.db
+
+## IDE
+.idea/
+*.swp
+*.swo
