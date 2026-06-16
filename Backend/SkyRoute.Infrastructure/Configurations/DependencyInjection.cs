@@ -25,6 +25,7 @@ public static class DependencyInjection
 
         // Repositories
         services.AddScoped<IUserRepository, UserRepository>();
+        services.AddScoped<IAirportRepository, AirportRepository>();
 
         // Authentication
         services.Configure<JwtSettings>(configuration.GetSection("JwtSettings"));
@@ -36,6 +37,7 @@ public static class DependencyInjection
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
         services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<IAirportService, AirportService>();
         services.AddScoped<IValidator<RegisterRequestDto>, RegisterRequestValidator>();
 
         return services;
