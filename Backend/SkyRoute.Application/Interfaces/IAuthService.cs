@@ -4,6 +4,6 @@ namespace SkyRoute.Application.Interfaces;
 
 public interface IAuthService
 {
-    Task<AuthResponseDto> RegisterAsync(RegisterRequestDto request);
-    Task<AuthResponseDto> LoginAsync(LoginRequestDto request);
+    Task<AuthServiceResult> RegisterAsync(RegisterRequestDto request);
+    Task<AuthServiceResult> LoginAsync(LoginRequestDto request);
 }

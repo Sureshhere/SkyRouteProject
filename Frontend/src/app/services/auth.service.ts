@@ -1,6 +1,6 @@
 import { Injectable, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable, tap, BehaviorSubject } from 'rxjs';
+import { Observable, tap } from 'rxjs';
 import { AuthResponse, RegisterRequest, LoginRequest } from '../models';
 
 @Injectable({
@@ -12,51 +12,48 @@ export class AuthService {
   userEmail = signal<string | null>(null);
   userFullName = signal<string | null>(null);
 
-  private tokenSubject = new BehaviorSubject<string | null>(null);
-
   constructor(private http: HttpClient) {
-    const token = localStorage.getItem('token');
-    if (token) {
+    if (localStorage.getItem('isLoggedIn') === 'true') {
       this.isAuthenticated.set(true);
       this.userEmail.set(localStorage.getItem('email'));
       this.userFullName.set(localStorage.getItem('fullName'));
-      this.tokenSubject.next(token);
     }
   }
 
   register(req: RegisterRequest): Observable<AuthResponse> {
-    return this.http.post<AuthResponse>(`${this.apiUrl}/register`, req).pipe(
+    return this.http.post<AuthResponse>(`${this.apiUrl}/register`, req, { withCredentials: true }).pipe(
       tap(res => this.handleAuthResponse(res))
     );
   }
 
   login(req: LoginRequest): Observable<AuthResponse> {
-    return this.http.post<AuthResponse>(`${this.apiUrl}/login`, req).pipe(
+    return this.http.post<AuthResponse>(`${this.apiUrl}/login`, req, { withCredentials: true }).pipe(
       tap(res => this.handleAuthResponse(res))
     );
   }
 
   logout(): void {
-    localStorage.removeItem('token');
+    this.http.post(`${this.apiUrl}/logout`, {}, { withCredentials: true }).subscribe({
+      complete: () => this.clearSession(),
+      error: () => this.clearSession()
+    });
+  }
+
+  private clearSession(): void {
+    localStorage.removeItem('isLoggedIn');
     localStorage.removeItem('email');
     localStorage.removeItem('fullName');
     this.isAuthenticated.set(false);
     this.userEmail.set(null);
     this.userFullName.set(null);
-    this.tokenSubject.next(null);
-  }
-
-  getToken(): string | null {
-    return localStorage.getItem('token');
   }
 
   private handleAuthResponse(res: AuthResponse): void {
-    localStorage.setItem('token', res.token);
+    localStorage.setItem('isLoggedIn', 'true');
     localStorage.setItem('email', res.email);
     localStorage.setItem('fullName', res.fullName);
     this.isAuthenticated.set(true);
     this.userEmail.set(res.email);
     this.userFullName.set(res.fullName);
-    this.tokenSubject.next(res.token);
   }
 }
