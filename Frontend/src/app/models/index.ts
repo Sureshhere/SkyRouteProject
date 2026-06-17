@@ -1,6 +1,5 @@
 export interface AuthResponse {
   id: string;
-  token: string;
   expiresIn: number;
   email: string;
   fullName: string;

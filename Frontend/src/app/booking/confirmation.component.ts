@@ -76,7 +76,7 @@ import { BookingConfirmation } from '../models';
   `
 })
 export class ConfirmationComponent implements OnInit {
-  confirmation = signal<any>(null);
+  confirmation = signal<BookingConfirmation | null>(null);
 
   constructor(private router: Router) {}
 

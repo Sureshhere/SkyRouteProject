@@ -16,7 +16,7 @@ public class AuthService : IAuthService
         _jwtTokenProvider = jwtTokenProvider;
     }
 
-    public async Task<AuthResponseDto> RegisterAsync(RegisterRequestDto request)
+    public async Task<AuthServiceResult> RegisterAsync(RegisterRequestDto request)
     {
         var existingUser = await _userRepository.GetByEmailAsync(request.Email);
         if (existingUser != null)
@@ -37,17 +37,20 @@ public class AuthService : IAuthService
 
         var token = _jwtTokenProvider.GenerateToken(user);
 
-        return new AuthResponseDto
+        return new AuthServiceResult
         {
-            Id = user.Id,
-            Email = user.Email,
-            FullName = user.FullName,
             Token = token,
-            ExpiresIn = 3600
+            Response = new AuthResponseDto
+            {
+                Id = user.Id,
+                Email = user.Email,
+                FullName = user.FullName,
+                ExpiresIn = 3600
+            }
         };
     }
 
-    public async Task<AuthResponseDto> LoginAsync(LoginRequestDto request)
+    public async Task<AuthServiceResult> LoginAsync(LoginRequestDto request)
     {
         var user = await _userRepository.GetByEmailAsync(request.Email.ToLowerInvariant());
         if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
@@ -58,13 +61,16 @@ public class AuthService : IAuthService
 
         var token = _jwtTokenProvider.GenerateToken(user);
 
-        return new AuthResponseDto
+        return new AuthServiceResult
         {
-            Id = user.Id,
-            Email = user.Email,
-            FullName = user.FullName,
             Token = token,
-            ExpiresIn = 3600
+            Response = new AuthResponseDto
+            {
+                Id = user.Id,
+                Email = user.Email,
+                FullName = user.FullName,
+                ExpiresIn = 3600
+            }
         };
     }
 }

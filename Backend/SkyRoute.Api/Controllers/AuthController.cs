@@ -1,7 +1,10 @@
 using FluentValidation;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using SkyRoute.Application.DTOs.Auth;
 using SkyRoute.Application.Interfaces;
+using SkyRoute.Infrastructure.Authentication;
 
 namespace SkyRoute.Api.Controllers;
 
@@ -11,11 +14,19 @@ public class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
     private readonly IValidator<RegisterRequestDto> _registerValidator;
+    private readonly IWebHostEnvironment _environment;
+    private readonly JwtSettings _jwtSettings;
 
-    public AuthController(IAuthService authService, IValidator<RegisterRequestDto> registerValidator)
+    public AuthController(
+        IAuthService authService,
+        IValidator<RegisterRequestDto> registerValidator,
+        IWebHostEnvironment environment,
+        IOptions<JwtSettings> jwtSettings)
     {
         _authService = authService;
         _registerValidator = registerValidator;
+        _environment = environment;
+        _jwtSettings = jwtSettings.Value;
     }
 
     [HttpPost("register")]
@@ -29,7 +40,8 @@ public class AuthController : ControllerBase
             return BadRequest(new { errors = validation.Errors.Select(e => e.ErrorMessage) });
 
         var result = await _authService.RegisterAsync(request);
-        return CreatedAtAction(nameof(Register), result);
+        SetAuthCookie(result.Token, result.Response.ExpiresIn);
+        return CreatedAtAction(nameof(Register), result.Response);
     }
 
     [HttpPost("login")]
@@ -41,6 +53,33 @@ public class AuthController : ControllerBase
             return BadRequest(ModelState);
 
         var result = await _authService.LoginAsync(request);
-        return Ok(result);
+        SetAuthCookie(result.Token, result.Response.ExpiresIn);
+        return Ok(result.Response);
+    }
+
+    [HttpPost("logout")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public IActionResult Logout()
+    {
+        Response.Cookies.Delete("auth_token", new CookieOptions
+        {
+            HttpOnly = true,
+            Secure = !_environment.IsDevelopment(),
+            SameSite = SameSiteMode.Strict,
+            Path = "/"
+        });
+        return NoContent();
+    }
+
+    private void SetAuthCookie(string token, int expiresIn)
+    {
+        Response.Cookies.Append("auth_token", token, new CookieOptions
+        {
+            HttpOnly = true,
+            Secure = !_environment.IsDevelopment(),
+            SameSite = SameSiteMode.Strict,
+            Expires = DateTimeOffset.UtcNow.AddHours(_jwtSettings.ExpirationHours),
+            Path = "/"
+        });
     }
 }
