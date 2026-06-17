@@ -62,11 +62,11 @@ public class AuthServiceTests
 
         // Assert
         result.Should().NotBeNull();
-        result.Email.Should().Be(request.Email.ToLowerInvariant());
-        result.FullName.Should().Be(request.FullName.Trim());
-        result.Id.Should().NotBeEmpty();
+        result.Response.Email.Should().Be(request.Email.ToLowerInvariant());
+        result.Response.FullName.Should().Be(request.FullName.Trim());
+        result.Response.Id.Should().NotBeEmpty();
         result.Token.Should().Be("fake-jwt-token");
-        result.ExpiresIn.Should().Be(3600);
+        result.Response.ExpiresIn.Should().Be(3600);
         
         _userRepoMock.Verify(r => r.AddAsync(It.IsAny<User>()), Times.Once);
         _userRepoMock.Verify(r => r.SaveChangesAsync(), Times.Once);
@@ -165,7 +165,7 @@ public class AuthServiceTests
         var result = await service.RegisterAsync(request);
 
         // Assert
-        result.Email.Should().Be("user@example.com");
+        result.Response.Email.Should().Be("user@example.com");
         capturedUser.Email.Should().Be("user@example.com");
     }
 
@@ -198,7 +198,7 @@ public class AuthServiceTests
         var result = await service.RegisterAsync(request);
 
         // Assert
-        result.FullName.Should().Be("User With Spaces");
+        result.Response.FullName.Should().Be("User With Spaces");
         capturedUser.FullName.Should().Be("User With Spaces");
     }
 
@@ -233,11 +233,11 @@ public class AuthServiceTests
 
         // Assert
         result.Should().NotBeNull();
-        result.Id.Should().Be(user.Id);
-        result.Email.Should().Be(user.Email);
-        result.FullName.Should().Be(user.FullName);
+        result.Response.Id.Should().Be(user.Id);
+        result.Response.Email.Should().Be(user.Email);
+        result.Response.FullName.Should().Be(user.FullName);
         result.Token.Should().Be("fake-jwt-token");
-        result.ExpiresIn.Should().Be(3600);
+        result.Response.ExpiresIn.Should().Be(3600);
     }
 
     /// <summary>

@@ -1,13 +1,17 @@
 using FluentAssertions;
 using FluentValidation;
 using FluentValidation.Results;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.Options;
 using Moq;
 using SkyRoute.Api.Controllers;
 using SkyRoute.Application.Common;
 using SkyRoute.Application.DTOs.Auth;
 using SkyRoute.Application.Interfaces;
 using SkyRoute.Domain.Models;
+using SkyRoute.Infrastructure.Authentication;
 
 namespace SkyRoute.Tests.Controllers;
 
@@ -19,9 +23,42 @@ public class AuthControllerTests
 {
     private readonly Mock<IAuthService> _authServiceMock = new();
     private readonly Mock<IValidator<RegisterRequestDto>> _registerValidatorMock = new();
+    private readonly Mock<IWebHostEnvironment> _environmentMock = new();
+    private readonly Mock<IOptions<JwtSettings>> _jwtSettingsMock = new();
 
-    private AuthController CreateController() =>
-        new(_authServiceMock.Object, _registerValidatorMock.Object);
+    private AuthController CreateController()
+    {
+        var jwtSettings = new JwtSettings
+        {
+            Secret = "test-secret-key-for-testing-purposes-only-256-bits",
+            Issuer = "SkyRoute",
+            Audience = "SkyRoute",
+            ExpirationHours = 1
+        };
+        
+        _jwtSettingsMock.Setup(x => x.Value).Returns(jwtSettings);
+        
+        var controller = new AuthController(
+            _authServiceMock.Object,
+            _registerValidatorMock.Object,
+            _environmentMock.Object,
+            _jwtSettingsMock.Object);
+        
+        // Mock HttpContext for cookie operations
+        var httpContextMock = new Mock<HttpContext>();
+        var responseMock = new Mock<HttpResponse>();
+        var cookieCollectionMock = new Mock<IResponseCookies>();
+        
+        httpContextMock.Setup(x => x.Response).Returns(responseMock.Object);
+        responseMock.Setup(x => x.Cookies).Returns(cookieCollectionMock.Object);
+        
+        controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = httpContextMock.Object
+        };
+        
+        return controller;
+    }
 
     private static RegisterRequestDto MakeRegisterRequest(
         string email = "user@example.com",
@@ -45,15 +82,23 @@ public class AuthControllerTests
 
     private static AuthResponseDto MakeAuthResponse(
         string email = "user@example.com",
-        string fullName = "Test User",
-        string token = "test-token") =>
+        string fullName = "Test User") =>
         new()
         {
             Id = Guid.NewGuid(),
             Email = email,
             FullName = fullName,
-            Token = token,
             ExpiresIn = 3600
+        };
+
+    private static AuthServiceResult MakeAuthServiceResult(
+        string email = "user@example.com",
+        string fullName = "Test User",
+        string token = "fake-jwt-token") =>
+        new()
+        {
+            Response = MakeAuthResponse(email, fullName),
+            Token = token
         };
 
     // ── Register Tests ──────────────────────────────────────────────────────────
@@ -66,12 +111,12 @@ public class AuthControllerTests
     {
         // Arrange
         var request = MakeRegisterRequest();
-        var response = MakeAuthResponse();
+        var serviceResult = MakeAuthServiceResult();
 
         _registerValidatorMock.Setup(v => v.ValidateAsync(request, default))
             .ReturnsAsync(new ValidationResult());
         _authServiceMock.Setup(s => s.RegisterAsync(request))
-            .ReturnsAsync(response);
+            .ReturnsAsync(serviceResult);
 
         var controller = CreateController();
 
@@ -86,9 +131,9 @@ public class AuthControllerTests
         createdResult.Value.Should().BeOfType<AuthResponseDto>();
         
         var returnedResponse = (createdResult.Value as AuthResponseDto)!;
-        returnedResponse.Email.Should().Be(response.Email);
-        returnedResponse.FullName.Should().Be(response.FullName);
-        returnedResponse.Id.Should().Be(response.Id);
+        returnedResponse.Email.Should().Be(serviceResult.Response.Email);
+        returnedResponse.FullName.Should().Be(serviceResult.Response.FullName);
+        returnedResponse.Id.Should().Be(serviceResult.Response.Id);
     }
 
     /// <summary>
@@ -155,12 +200,12 @@ public class AuthControllerTests
     {
         // Arrange
         var request = MakeRegisterRequest("newemail@test.com", "ValidPass123", "New User Name");
-        var response = MakeAuthResponse("newemail@test.com", "New User Name", "jwt-token");
+        var serviceResult = MakeAuthServiceResult("newemail@test.com", "New User Name");
 
         _registerValidatorMock.Setup(v => v.ValidateAsync(request, default))
             .ReturnsAsync(new ValidationResult());
         _authServiceMock.Setup(s => s.RegisterAsync(request))
-            .ReturnsAsync(response);
+            .ReturnsAsync(serviceResult);
 
         var controller = CreateController();
 
@@ -171,9 +216,9 @@ public class AuthControllerTests
         var createdResult = result as CreatedAtActionResult;
         var returnedResponse = createdResult.Value as AuthResponseDto;
         
-        returnedResponse.Email.Should().Be("newemail@test.com");
-        returnedResponse.FullName.Should().Be("New User Name");
-        returnedResponse.Id.Should().NotBeEmpty();
+        returnedResponse.Email.Should().Be(serviceResult.Response.Email);
+        returnedResponse.FullName.Should().Be(serviceResult.Response.FullName);
+        returnedResponse.Id.Should().Be(serviceResult.Response.Id);
     }
 
     // ── Login Tests ─────────────────────────────────────────────────────────────
@@ -186,10 +231,10 @@ public class AuthControllerTests
     {
         // Arrange
         var request = MakeLoginRequest();
-        var response = MakeAuthResponse();
+        var serviceResult = MakeAuthServiceResult();
 
         _authServiceMock.Setup(s => s.LoginAsync(request))
-            .ReturnsAsync(response);
+            .ReturnsAsync(serviceResult);
 
         var controller = CreateController();
 
@@ -203,8 +248,8 @@ public class AuthControllerTests
         okResult.Value.Should().BeOfType<AuthResponseDto>();
         
         var returnedResponse = okResult.Value as AuthResponseDto;
-        returnedResponse.Email.Should().Be(response.Email);
-        returnedResponse.FullName.Should().Be(response.FullName);
+        returnedResponse.Email.Should().Be(serviceResult.Response.Email);
+        returnedResponse.FullName.Should().Be(serviceResult.Response.FullName);
     }
 
     /// <summary>
@@ -275,13 +320,11 @@ public class AuthControllerTests
     public async Task Login_ResponseContainsUserId()
     {
         // Arrange
-        var userId = Guid.NewGuid();
         var request = MakeLoginRequest();
-        var response = MakeAuthResponse();
-        response.Id = userId;
+        var serviceResult = MakeAuthServiceResult();
 
         _authServiceMock.Setup(s => s.LoginAsync(request))
-            .ReturnsAsync(response);
+            .ReturnsAsync(serviceResult);
 
         var controller = CreateController();
 
@@ -292,22 +335,22 @@ public class AuthControllerTests
         var okResult = result as OkObjectResult;
         var returnedResponse = okResult.Value as AuthResponseDto;
         
-        returnedResponse.Id.Should().Be(userId);
+        returnedResponse.Id.Should().Be(serviceResult.Response.Id);
     }
 
     /// <summary>
-    /// Verify successful login returns response with token.
+    /// Verify successful login returns response with user info but NOT token.
+    /// Token is stored in HttpOnly cookie, not in response.
     /// </summary>
     [Fact]
-    public async Task Login_ResponseContainsToken()
+    public async Task Login_ResponseDoesNotContainToken()
     {
         // Arrange
-        var testToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...";
         var request = MakeLoginRequest();
-        var response = MakeAuthResponse(token: testToken);
+        var serviceResult = MakeAuthServiceResult();
 
         _authServiceMock.Setup(s => s.LoginAsync(request))
-            .ReturnsAsync(response);
+            .ReturnsAsync(serviceResult);
 
         var controller = CreateController();
 
@@ -318,7 +361,10 @@ public class AuthControllerTests
         var okResult = result as OkObjectResult;
         var returnedResponse = okResult.Value as AuthResponseDto;
         
-        returnedResponse.Token.Should().Be(testToken);
+        // Verify response has user info but not token (token is in HttpOnly cookie)
+        returnedResponse.Email.Should().NotBeNullOrEmpty();
+        returnedResponse.Id.Should().NotBe(Guid.Empty);
+        // Token should not be accessible in response DTO
     }
 
     /// <summary>
@@ -329,11 +375,10 @@ public class AuthControllerTests
     {
         // Arrange
         var request = MakeLoginRequest();
-        var response = MakeAuthResponse();
-        response.ExpiresIn = 3600;
+        var serviceResult = MakeAuthServiceResult();
 
         _authServiceMock.Setup(s => s.LoginAsync(request))
-            .ReturnsAsync(response);
+            .ReturnsAsync(serviceResult);
 
         var controller = CreateController();
 
@@ -344,7 +389,7 @@ public class AuthControllerTests
         var okResult = result as OkObjectResult;
         var returnedResponse = okResult.Value as AuthResponseDto;
         
-        returnedResponse.ExpiresIn.Should().Be(3600);
+        returnedResponse.ExpiresIn.Should().Be(serviceResult.Response.ExpiresIn);
     }
 
     // ── Model Validation Tests ──────────────────────────────────────────────────
@@ -361,7 +406,7 @@ public class AuthControllerTests
         _registerValidatorMock.Setup(v => v.ValidateAsync(request, default))
             .ReturnsAsync(new ValidationResult());
         _authServiceMock.Setup(s => s.RegisterAsync(request))
-            .ReturnsAsync(MakeAuthResponse());
+            .ReturnsAsync(MakeAuthServiceResult());
 
         var controller = CreateController();
 
@@ -449,10 +494,10 @@ public class AuthControllerTests
     {
         // Arrange - This is a specification test showing expected behavior
         var request = MakeLoginRequest();
-        var response = MakeAuthResponse();
+        var serviceResult = MakeAuthServiceResult();
 
         _authServiceMock.Setup(s => s.LoginAsync(request))
-            .ReturnsAsync(response);
+            .ReturnsAsync(serviceResult);
 
         var controller = CreateController();
 
@@ -476,12 +521,12 @@ public class AuthControllerTests
     {
         // Arrange - This is a specification test
         var request = MakeRegisterRequest();
-        var response = MakeAuthResponse();
+        var serviceResult = MakeAuthServiceResult();
 
         _registerValidatorMock.Setup(v => v.ValidateAsync(request, default))
             .ReturnsAsync(new ValidationResult());
         _authServiceMock.Setup(s => s.RegisterAsync(request))
-            .ReturnsAsync(response);
+            .ReturnsAsync(serviceResult);
 
         var controller = CreateController();
 
@@ -503,11 +548,10 @@ public class AuthControllerTests
     {
         // Arrange - Response indicates JWT expires in 3600 seconds
         var request = MakeLoginRequest();
-        var response = MakeAuthResponse();
-        response.ExpiresIn = 3600; // 1 hour
+        var serviceResult = MakeAuthServiceResult();
 
         _authServiceMock.Setup(s => s.LoginAsync(request))
-            .ReturnsAsync(response);
+            .ReturnsAsync(serviceResult);
 
         var controller = CreateController();
 
@@ -517,6 +561,6 @@ public class AuthControllerTests
         // Assert - Verify response indicates expiration
         var okResult = result as OkObjectResult;
         var authResponse = okResult.Value as AuthResponseDto;
-        authResponse.ExpiresIn.Should().Be(3600);
+        authResponse.ExpiresIn.Should().Be(serviceResult.Response.ExpiresIn);
     }
 }

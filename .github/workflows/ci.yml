@@ -26,14 +26,14 @@ jobs:
           dotnet-version: '8.0.x'
 
       - name: Restore dependencies
-        run: dotnet restore Backend/SkyRoute.slnx
+        run: dotnet restore Backend/SkyRoute.sln
 
       - name: Build solution
-        run: dotnet build Backend/SkyRoute.slnx --no-restore --configuration Release
+        run: dotnet build Backend/SkyRoute.sln --no-restore --configuration Release
 
       - name: Run tests with coverage
         run: |
-          dotnet test Backend/SkyRoute.slnx \
+          dotnet test Backend/SkyRoute.sln \
             --no-build \
             --configuration Release \
             --verbosity normal \
