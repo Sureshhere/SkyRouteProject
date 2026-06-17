@@ -1,15 +1,12 @@
-import { ComponentFixture, TestBed, waitForAsync } from '@angular/core/testing';
-import { ActivatedRoute } from '@angular/router';
-import { signal } from '@angular/core';
-import { of } from 'rxjs';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { Router } from '@angular/router';
 import { ConfirmationComponent } from '../booking/confirmation.component';
-import { BookingService } from '../services/booking.service';
 import { BookingConfirmation } from '../models';
 
 describe('ConfirmationComponent - Signals and Strong Typing', () => {
   let component: ConfirmationComponent;
   let fixture: ComponentFixture<ConfirmationComponent>;
-  let bookingService: jasmine.SpyObj<BookingService>;
+  let router: jasmine.SpyObj<Router>;
 
   const mockBookingConfirmation: BookingConfirmation = {
     bookingId: 'BK-UUID-123',
@@ -19,39 +16,29 @@ describe('ConfirmationComponent - Signals and Strong Typing', () => {
       flightNumber: 'GA-123',
       origin: 'NYC',
       destination: 'LAX',
-      departureTime: '2026-06-18T10:00:00',
-      arrivalTime: '2026-06-18T13:00:00',
+      departureTime: '2026-06-20T10:00:00Z',
+      arrivalTime: '2026-06-20T14:00:00Z',
       cabinClass: 'Economy'
     },
     pricing: {
-      totalPrice: 1000,
-      pricePerPassenger: 500,
+      totalPrice: 320.00,
+      pricePerPassenger: 160.00,
       numberOfPassengers: 2
     },
     bookingStatus: 'CONFIRMED',
-    createdAt: '2026-06-17'
+    createdAt: '2026-06-17T15:00:00Z'
   };
 
-  beforeEach(waitForAsync(() => {
-    const bookingServiceSpy = jasmine.createSpyObj('BookingService', ['getBooking']);
+  beforeEach(async () => {
+    router = jasmine.createSpyObj('Router', ['navigate']);
 
-    TestBed.configureTestingModule({
+    await TestBed.configureTestingModule({
       imports: [ConfirmationComponent],
       providers: [
-        { provide: BookingService, useValue: bookingServiceSpy },
-        {
-          provide: ActivatedRoute,
-          useValue: {
-            params: of({ bookingRef: 'BK-12345' })
-          }
-        }
+        { provide: Router, useValue: router }
       ]
     }).compileComponents();
 
-    bookingService = TestBed.inject(BookingService) as jasmine.SpyObj<BookingService>;
-  }));
-
-  beforeEach(() => {
     fixture = TestBed.createComponent(ConfirmationComponent);
     component = fixture.componentInstance;
   });
@@ -62,86 +49,91 @@ describe('ConfirmationComponent - Signals and Strong Typing', () => {
     });
 
     it('should have strongly typed confirmation signal', () => {
-      const initialValue = component.confirmation();
-      expect(initialValue).toBeNull();
-      expect(typeof component.confirmation).toBe('function');
+      component.confirmation.set(mockBookingConfirmation);
+      expect(component.confirmation()).toBeDefined();
+      expect(component.confirmation()!.bookingReferenceCode).toBe('BK-12345');
     });
   });
 
-  describe('Route Parameter Handling', () => {
-    it('should load booking details from route parameter', waitForAsync(() => {
-      bookingService.getBooking.and.returnValue(of(mockBookingConfirmation));
+  describe('History State Handling', () => {
+    it('should load booking details from history state', () => {
+      history.pushState({ confirmation: mockBookingConfirmation }, '', '');
+      component.ngOnInit();
+      expect(component.confirmation()).toEqual(mockBookingConfirmation);
+    });
 
-      fixture.detectChanges();
-      fixture.whenStable().then(() => {
-        expect(bookingService.getBooking).toHaveBeenCalledWith('BK-12345');
-      });
-    }));
+    it('should navigate to flights page when no confirmation in state', () => {
+      history.pushState({}, '', '');
+      component.ngOnInit();
+      expect(router.navigate).toHaveBeenCalledWith(['/flights']);
+    });
 
-    it('should populate bookingConfirmation signal with fetched data', waitForAsync(() => {
-      bookingService.getBooking.and.returnValue(of(mockBookingConfirmation));
-
-      fixture.detectChanges();
-      fixture.whenStable().then(() => {
-        const booking = component.confirmation();
-        expect(booking).toEqual(mockBookingConfirmation);
-        expect(booking?.bookingReferenceCode).toBe('BK-12345');
-        expect(booking?.bookingStatus).toBe('CONFIRMED');
-      });
-    }));
-
-    it('should handle booking service errors gracefully', waitForAsync(() => {
-      bookingService.getBooking.and.returnValue(of(null as any));
-
-      fixture.detectChanges();
-      fixture.whenStable().then(() => {
-        const booking = component.confirmation();
-        expect(booking).toBeNull();
-      });
-    }));
+    it('should populate confirmation signal with correct data', () => {
+      history.pushState({ confirmation: mockBookingConfirmation }, '', '');
+      component.ngOnInit();
+      expect(component.confirmation()!.bookingReferenceCode).toBe('BK-12345');
+      expect(component.confirmation()!.flightDetails.origin).toBe('NYC');
+      expect(component.confirmation()!.pricing.totalPrice).toBe(320.00);
+    });
   });
 
-  describe('Component Display and Template', () => {
-    it('should display booking confirmation details when signal has data', waitForAsync(() => {
-      bookingService.getBooking.and.returnValue(of(mockBookingConfirmation));
-
+  describe('Component Display', () => {
+    it('should display booking confirmation when signal has data', () => {
+      component.confirmation.set(mockBookingConfirmation);
       fixture.detectChanges();
-      fixture.whenStable().then(() => {
-        fixture.detectChanges();
-        const compiled = fixture.nativeElement;
-        expect(compiled.textContent).toContain('BK-12345');
-      });
-    }));
+      const compiled = fixture.nativeElement;
+      expect(compiled.textContent).toContain('BK-12345');
+    });
 
-    it('should display total price from booking confirmation', waitForAsync(() => {
-      bookingService.getBooking.and.returnValue(of(mockBookingConfirmation));
-
+    it('should display total price from booking confirmation', () => {
+      component.confirmation.set(mockBookingConfirmation);
       fixture.detectChanges();
-      fixture.whenStable().then(() => {
-        const booking = component.confirmation();
-        expect(booking?.pricing.totalPrice).toBe(1000);
-      });
-    }));
+      const compiled = fixture.nativeElement;
+      expect(compiled.textContent).toContain('320.00');
+    });
 
-    it('should display flight details from booking confirmation', waitForAsync(() => {
-      bookingService.getBooking.and.returnValue(of(mockBookingConfirmation));
-
+    it('should display flight details', () => {
+      component.confirmation.set(mockBookingConfirmation);
       fixture.detectChanges();
-      fixture.whenStable().then(() => {
-        const booking = component.confirmation();
-        expect(booking?.flightDetails.airlineName).toBe('Global Airways');
-        expect(booking?.flightDetails.flightNumber).toBe('GA-123');
-      });
-    }));
+      const compiled = fixture.nativeElement;
+      expect(compiled.textContent).toContain('GA-123');
+      expect(compiled.textContent).toContain('Economy');
+    });
 
-    it('should display confirmation status', waitForAsync(() => {
-      bookingService.getBooking.and.returnValue(of(mockBookingConfirmation));
-
+    it('should display confirmation status badge', () => {
+      component.confirmation.set(mockBookingConfirmation);
       fixture.detectChanges();
-      fixture.whenStable().then(() => {
-        const booking = component.confirmation();
-        expect(booking?.bookingStatus).toBe('CONFIRMED');
-      });
-    }));
+      const compiled = fixture.nativeElement;
+      expect(compiled.textContent).toContain('CONFIRMED');
+    });
+  });
+
+  describe('Navigation', () => {
+    it('should navigate to flights on goHome', () => {
+      component.goHome();
+      expect(router.navigate).toHaveBeenCalledWith(['/flights']);
+    });
+
+    it('should navigate to flights on searchMore', () => {
+      component.searchMore();
+      expect(router.navigate).toHaveBeenCalledWith(['/flights']);
+    });
+  });
+
+  describe('Price Formatting', () => {
+    it('should format price with USD currency and 2 decimals', () => {
+      const formatted = component.formatPrice(160.00);
+      expect(formatted).toBe('USD 160.00');
+    });
+
+    it('should format price with decimals for fractional amounts', () => {
+      const formatted = component.formatPrice(99.99);
+      expect(formatted).toBe('USD 99.99');
+    });
+
+    it('should format whole numbers with .00', () => {
+      const formatted = component.formatPrice(250);
+      expect(formatted).toBe('USD 250.00');
+    });
   });
 });

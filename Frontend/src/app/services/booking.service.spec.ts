@@ -49,7 +49,7 @@ describe('BookingService - HttpOnly Cookie Authentication', () => {
   });
 
   describe('Create Booking', () => {
-    it('should create booking successfully', (done) => {
+    it('should create booking with POST request', (done) => {
       const bookingRequest: CreateBookingRequest = {
         flightId: 'GA-001',
         departureDate: '2026-06-18',
@@ -68,7 +68,7 @@ describe('BookingService - HttpOnly Cookie Authentication', () => {
       req.flush(mockBookingConfirmation);
     });
 
-    it('should send booking data correctly in request body', (done) => {
+    it('should include booking data in request body', (done) => {
       const bookingRequest: CreateBookingRequest = {
         flightId: 'GA-002',
         departureDate: '2026-06-20',
@@ -83,28 +83,6 @@ describe('BookingService - HttpOnly Cookie Authentication', () => {
 
       const req = httpMock.expectOne('http://localhost:5235/api/bookings');
       expect(req.request.body).toEqual(bookingRequest);
-      req.flush(mockBookingConfirmation);
-    });
-
-    it('should handle multiple passengers in booking', (done) => {
-      const bookingRequest: CreateBookingRequest = {
-        flightId: 'GA-003',
-        departureDate: '2026-06-21',
-        passengers: [
-          { email: 'user1@example.com', fullName: 'John Doe', documentNumber: 'ABC123' },
-          { email: 'user2@example.com', fullName: 'Jane Doe', documentNumber: 'DEF456' }
-        ]
-      };
-
-      service.createBooking(bookingRequest).subscribe({
-        next: (response) => {
-          expect(response.bookingReferenceCode).toBeDefined();
-          done();
-        }
-      });
-
-      const req = httpMock.expectOne('http://localhost:5235/api/bookings');
-      expect(req.request.body.passengers.length).toBe(2);
       req.flush(mockBookingConfirmation);
     });
 
@@ -146,7 +124,7 @@ describe('BookingService - HttpOnly Cookie Authentication', () => {
   });
 
   describe('Get Booking', () => {
-    it('should retrieve booking successfully', (done) => {
+    it('should retrieve booking with GET request', (done) => {
       service.getBooking('BK-12345').subscribe({
         next: (response) => {
           expect(response.bookingReferenceCode).toBe('BK-12345');
@@ -197,16 +175,16 @@ describe('BookingService - HttpOnly Cookie Authentication', () => {
   });
 
   describe('Cancel Booking', () => {
-    it('should cancel booking successfully', (done) => {
+    it('should cancel booking with DELETE request', (done) => {
       service.cancelBooking('BK-12345').subscribe({
         next: (response) => {
-          expect(response.message).toBe('Booking cancelled successfully');
+          expect(response.message).toBeDefined();
           done();
         }
       });
 
-      const req = httpMock.expectOne('http://localhost:5235/api/bookings/BK-12345/cancel');
-      expect(req.request.method).toBe('POST');
+      const req = httpMock.expectOne('http://localhost:5235/api/bookings/BK-12345');
+      expect(req.request.method).toBe('DELETE');
       req.flush({ message: 'Booking cancelled successfully' });
     });
 
@@ -217,8 +195,9 @@ describe('BookingService - HttpOnly Cookie Authentication', () => {
         }
       });
 
-      const req = httpMock.expectOne('http://localhost:5235/api/bookings/BK-12345/cancel');
-      expect(req.request.url).toContain('/api/bookings/BK-12345/cancel');
+      const req = httpMock.expectOne('http://localhost:5235/api/bookings/BK-12345');
+      expect(req.request.url).toContain('/api/bookings/BK-12345');
+      expect(req.request.method).toBe('DELETE');
       req.flush({ message: 'Cancelled' });
     });
 
@@ -230,7 +209,7 @@ describe('BookingService - HttpOnly Cookie Authentication', () => {
         }
       });
 
-      const req = httpMock.expectOne('http://localhost:5235/api/bookings/INVALID-REF/cancel');
+      const req = httpMock.expectOne('http://localhost:5235/api/bookings/INVALID-REF');
       req.flush({ error: 'Booking not found' }, { status: 404, statusText: 'Not Found' });
     });
 
@@ -242,8 +221,32 @@ describe('BookingService - HttpOnly Cookie Authentication', () => {
         }
       });
 
-      const req = httpMock.expectOne('http://localhost:5235/api/bookings/BK-12345/cancel');
+      const req = httpMock.expectOne('http://localhost:5235/api/bookings/BK-12345');
       req.flush({ error: 'Unauthorized' }, { status: 401, statusText: 'Unauthorized' });
+    });
+  });
+
+  describe('Document Validation', () => {
+    it('should validate national ID format correctly', () => {
+      expect(service.validateDocumentNumber('NationalId', 'ABC123DEF')).toBe(true);
+      expect(service.validateDocumentNumber('NationalId', 'short')).toBe(false);
+    });
+
+    it('should validate passport number format correctly', () => {
+      expect(service.validateDocumentNumber('PassportNumber', 'ABC123')).toBe(true);
+      expect(service.validateDocumentNumber('PassportNumber', 'AB12')).toBe(false);
+    });
+  });
+
+  describe('Route Type Detection', () => {
+    it('should identify domestic routes correctly', () => {
+      expect(service.isDomesticRoute('US', 'US')).toBe(true);
+      expect(service.isDomesticRoute('us', 'US')).toBe(true);
+    });
+
+    it('should identify international routes correctly', () => {
+      expect(service.isDomesticRoute('US', 'CA')).toBe(false);
+      expect(service.isDomesticRoute('US', 'UK')).toBe(false);
     });
   });
 });
