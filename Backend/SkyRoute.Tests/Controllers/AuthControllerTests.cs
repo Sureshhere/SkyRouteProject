@@ -120,7 +120,8 @@ public class AuthControllerTests
     }
 
     /// <summary>
-    /// Verify registration with duplicate email returns 409 Conflict.
+    /// Verify registration with duplicate email throws AppException.
+    /// The error handling middleware converts this to 409 Conflict at runtime.
     /// </summary>
     [Fact]
     public async Task Register_WithDuplicateEmail_ShouldReturn409Conflict()
@@ -135,12 +136,14 @@ public class AuthControllerTests
 
         var controller = CreateController();
 
-        // Act
-        var result = await controller.Register(request);
-
-        // Assert
-        // The error is caught by error handling middleware, but we verify that
-        // the service throws the correct exception
+        // Act & Assert
+        // The controller delegates to service, which throws AppException
+        // The error handling middleware converts this to 409 Conflict response
+        var exception = await Assert.ThrowsAsync<AppException>(
+            async () => await controller.Register(request)
+        );
+        
+        exception.StatusCode.Should().Be(409);
         _authServiceMock.Verify(s => s.RegisterAsync(request), Times.Once);
     }
 

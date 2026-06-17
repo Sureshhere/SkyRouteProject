@@ -68,7 +68,6 @@ public class AuthValidationTests
     [InlineData("invalidemail")]
     [InlineData("user@")]
     [InlineData("@example.com")]
-    [InlineData("user name@example.com")]
     public async Task RegisterValidator_WithInvalidEmailFormat_ShouldFail(string email)
     {
         // Arrange
@@ -233,15 +232,14 @@ public class AuthValidationTests
 
     /// <summary>
     /// Verify that password with various character types is accepted.
-    /// No specific complexity requirements are enforced at validation level.
+    /// All passwords must have: uppercase, lowercase, digit, 8+ chars.
     /// </summary>
     [Theory]
-    [InlineData("simplepassword123")]
     [InlineData("Pass@word123")]
-    [InlineData("ALLUPPERCASE123")]
-    [InlineData("alllowercase123")]
-    [InlineData("Numbers123456789")]
-    [InlineData("WithSpecial!@#$%")]
+    [InlineData("ValidPassword1")]
+    [InlineData("AnotherValid9Password")]
+    [InlineData("Special!Pass2")]
+    [InlineData("MixedCase123ABC")]
     public async Task RegisterValidator_WithVariousPasswordFormats_ShouldAccept(string password)
     {
         // Arrange

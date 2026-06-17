@@ -26,13 +26,22 @@ public class BookingControllerAuthTests
     {
         var controller = new BookingsController(_bookingServiceMock.Object, _validatorMock.Object);
         
+        // Always create HttpContext, either with or without authenticated user
+        var httpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext();
         if (user != null)
         {
-            controller.ControllerContext = new ControllerContext
-            {
-                HttpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext { User = user }
-            };
+            httpContext.User = user;
         }
+        else
+        {
+            // Create unauthenticated context with empty Claims principal
+            httpContext.User = new ClaimsPrincipal(new ClaimsIdentity());
+        }
+        
+        controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = httpContext
+        };
 
         return controller;
     }
@@ -138,15 +147,19 @@ public class BookingControllerAuthTests
         // Arrange
         var request = MakeBookingRequest();
         var controller = CreateController(); // No authenticated user
+        
+        // Set up validator to return valid result for any input
+        _validatorMock.Setup(v => v.ValidateAsync(It.IsAny<CreateBookingRequestDto>(), default))
+            .ReturnsAsync(new ValidationResult());
 
-        // Act - In a real scenario, the middleware would prevent this
-        // Here we verify the controller expects an authenticated user
-        var result = await controller.CreateBooking(request);
-
-        // Assert
+        // Act & Assert
         // Without authentication, controller should throw UnauthorizedAccessException
         // when trying to get current user ID
-        result.Should().NotBeNull();
+        var exception = await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            async () => await controller.CreateBooking(request)
+        );
+        
+        Assert.NotNull(exception);
     }
 
     /// <summary>
@@ -188,11 +201,12 @@ public class BookingControllerAuthTests
         // Arrange
         var controller = CreateController(); // No authenticated user
 
-        // Act
-        var result = await controller.GetByReference("SK123456");
-
-        // Assert
-        result.Should().NotBeNull();
+        // Act & Assert
+        var exception = await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            async () => await controller.GetByReference("SK123456")
+        );
+        
+        Assert.NotNull(exception);
     }
 
     /// <summary>
@@ -303,6 +317,10 @@ public class BookingControllerAuthTests
         var identity = new ClaimsIdentity(claims, "TestScheme");
         var user = new ClaimsPrincipal(identity);
 
+        // Set up validator to return valid result
+        _validatorMock.Setup(v => v.ValidateAsync(request, default))
+            .ReturnsAsync(new ValidationResult());
+
         var controller = CreateController(user);
 
         // Act & Assert
@@ -324,6 +342,10 @@ public class BookingControllerAuthTests
         };
         var identity = new ClaimsIdentity(claims, "TestScheme");
         var user = new ClaimsPrincipal(identity);
+
+        // Set up validator to return valid result
+        _validatorMock.Setup(v => v.ValidateAsync(request, default))
+            .ReturnsAsync(new ValidationResult());
 
         var controller = CreateController(user);
 
