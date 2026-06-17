@@ -3,7 +3,6 @@ import { HttpClientTestingModule, HttpTestingController } from '@angular/common/
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { AuthService } from '../services/auth.service';
-import { of } from 'rxjs';
 
 describe('Auth Interceptor - 401 Handling & HttpOnly Cookie', () => {
   let httpClient: HttpClient;
@@ -35,8 +34,6 @@ describe('Auth Interceptor - 401 Handling & HttpOnly Cookie', () => {
 
   describe('401 Error Handling - Non-Auth Endpoints', () => {
     it('should call logout on 401 response from /api/bookings endpoint', (done) => {
-      authService.logout.and.returnValue(of({}));
-
       httpClient.get('/api/bookings/BK-12345').subscribe({
         error: () => {
           expect(authService.logout).toHaveBeenCalled();
@@ -49,8 +46,6 @@ describe('Auth Interceptor - 401 Handling & HttpOnly Cookie', () => {
     });
 
     it('should navigate to /login after logout on 401', (done) => {
-      authService.logout.and.returnValue(of({}));
-
       httpClient.get('/api/flights').subscribe({
         error: () => {
           expect(router.navigate).toHaveBeenCalledWith(['/login']);
@@ -63,8 +58,6 @@ describe('Auth Interceptor - 401 Handling & HttpOnly Cookie', () => {
     });
 
     it('should handle 401 from /api/bookings/create endpoint', (done) => {
-      authService.logout.and.returnValue(of({}));
-
       httpClient.post('/api/bookings', {}).subscribe({
         error: () => {
           expect(authService.logout).toHaveBeenCalled();
@@ -78,8 +71,6 @@ describe('Auth Interceptor - 401 Handling & HttpOnly Cookie', () => {
     });
 
     it('should handle 401 from /api/flights endpoint', (done) => {
-      authService.logout.and.returnValue(of({}));
-
       httpClient.get('/api/flights?departure=NYC').subscribe({
         error: () => {
           expect(authService.logout).toHaveBeenCalled();
@@ -130,8 +121,6 @@ describe('Auth Interceptor - 401 Handling & HttpOnly Cookie', () => {
     });
 
     it('should prevent infinite logout loop on 401 from auth endpoints', (done) => {
-      authService.logout.and.returnValue(of({}));
-
       httpClient.post('/api/auth/login', {}).subscribe({
         error: () => {
           expect(authService.logout).not.toHaveBeenCalled();

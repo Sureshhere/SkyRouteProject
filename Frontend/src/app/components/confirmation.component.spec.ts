@@ -2,7 +2,7 @@ import { ComponentFixture, TestBed, waitForAsync } from '@angular/core/testing';
 import { ActivatedRoute } from '@angular/router';
 import { signal } from '@angular/core';
 import { of } from 'rxjs';
-import { ConfirmationComponent } from './confirmation.component';
+import { ConfirmationComponent } from '../booking/confirmation.component';
 import { BookingService } from '../services/booking.service';
 import { BookingConfirmation } from '../models';
 
@@ -36,7 +36,7 @@ describe('ConfirmationComponent - Signals and Strong Typing', () => {
     const bookingServiceSpy = jasmine.createSpyObj('BookingService', ['getBooking']);
 
     TestBed.configureTestingModule({
-      declarations: [ConfirmationComponent],
+      imports: [ConfirmationComponent],
       providers: [
         { provide: BookingService, useValue: bookingServiceSpy },
         {
@@ -57,14 +57,14 @@ describe('ConfirmationComponent - Signals and Strong Typing', () => {
   });
 
   describe('Signal Initialization', () => {
-    it('should initialize bookingConfirmation signal as null', () => {
-      expect(component.bookingConfirmation()).toBeNull();
+    it('should initialize confirmation signal as null', () => {
+      expect(component.confirmation()).toBeNull();
     });
 
-    it('should have strongly typed bookingConfirmation signal', () => {
-      const initialValue = component.bookingConfirmation();
+    it('should have strongly typed confirmation signal', () => {
+      const initialValue = component.confirmation();
       expect(initialValue).toBeNull();
-      expect(typeof component.bookingConfirmation).toBe('function');
+      expect(typeof component.confirmation).toBe('function');
     });
   });
 
@@ -83,7 +83,7 @@ describe('ConfirmationComponent - Signals and Strong Typing', () => {
 
       fixture.detectChanges();
       fixture.whenStable().then(() => {
-        const booking = component.bookingConfirmation();
+        const booking = component.confirmation();
         expect(booking).toEqual(mockBookingConfirmation);
         expect(booking?.bookingReferenceCode).toBe('BK-12345');
         expect(booking?.bookingStatus).toBe('CONFIRMED');
@@ -95,7 +95,7 @@ describe('ConfirmationComponent - Signals and Strong Typing', () => {
 
       fixture.detectChanges();
       fixture.whenStable().then(() => {
-        const booking = component.bookingConfirmation();
+        const booking = component.confirmation();
         expect(booking).toBeNull();
       });
     }));
@@ -118,7 +118,7 @@ describe('ConfirmationComponent - Signals and Strong Typing', () => {
 
       fixture.detectChanges();
       fixture.whenStable().then(() => {
-        const booking = component.bookingConfirmation();
+        const booking = component.confirmation();
         expect(booking?.pricing.totalPrice).toBe(1000);
       });
     }));
@@ -128,7 +128,7 @@ describe('ConfirmationComponent - Signals and Strong Typing', () => {
 
       fixture.detectChanges();
       fixture.whenStable().then(() => {
-        const booking = component.bookingConfirmation();
+        const booking = component.confirmation();
         expect(booking?.flightDetails.airlineName).toBe('Global Airways');
         expect(booking?.flightDetails.flightNumber).toBe('GA-123');
       });
@@ -139,7 +139,7 @@ describe('ConfirmationComponent - Signals and Strong Typing', () => {
 
       fixture.detectChanges();
       fixture.whenStable().then(() => {
-        const booking = component.bookingConfirmation();
+        const booking = component.confirmation();
         expect(booking?.bookingStatus).toBe('CONFIRMED');
       });
     }));
