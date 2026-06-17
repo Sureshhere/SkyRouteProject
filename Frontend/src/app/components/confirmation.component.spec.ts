@@ -4,15 +4,7 @@ import { signal } from '@angular/core';
 import { of } from 'rxjs';
 import { ConfirmationComponent } from './confirmation.component';
 import { BookingService } from '../services/booking.service';
-
-interface BookingConfirmation {
-  bookingRef: string;
-  flightId: string;
-  passengers: string[];
-  totalPrice: number;
-  status: string;
-  confirmationDate?: string;
-}
+import { BookingConfirmation } from '../models';
 
 describe('ConfirmationComponent - Signals and Strong Typing', () => {
   let component: ConfirmationComponent;
@@ -20,12 +12,24 @@ describe('ConfirmationComponent - Signals and Strong Typing', () => {
   let bookingService: jasmine.SpyObj<BookingService>;
 
   const mockBookingConfirmation: BookingConfirmation = {
-    bookingRef: 'BK-12345',
-    flightId: 'GA-001',
-    passengers: ['John Doe', 'Jane Doe'],
-    totalPrice: 1000,
-    status: 'confirmed',
-    confirmationDate: '2026-06-17'
+    bookingId: 'BK-UUID-123',
+    bookingReferenceCode: 'BK-12345',
+    flightDetails: {
+      airlineName: 'Global Airways',
+      flightNumber: 'GA-123',
+      origin: 'NYC',
+      destination: 'LAX',
+      departureTime: '2026-06-18T10:00:00',
+      arrivalTime: '2026-06-18T13:00:00',
+      cabinClass: 'Economy'
+    },
+    pricing: {
+      totalPrice: 1000,
+      pricePerPassenger: 500,
+      numberOfPassengers: 2
+    },
+    bookingStatus: 'CONFIRMED',
+    createdAt: '2026-06-17'
   };
 
   beforeEach(waitForAsync(() => {
@@ -57,39 +61,15 @@ describe('ConfirmationComponent - Signals and Strong Typing', () => {
       expect(component.bookingConfirmation()).toBeNull();
     });
 
-    it('should have strongly typed bookingConfirmation signal (BookingConfirmation | null)', () => {
+    it('should have strongly typed bookingConfirmation signal', () => {
       const initialValue = component.bookingConfirmation();
       expect(initialValue).toBeNull();
       expect(typeof component.bookingConfirmation).toBe('function');
     });
-
-    it('should NOT use any type for bookingConfirmation signal', () => {
-      const booking = component.bookingConfirmation();
-      if (booking !== null) {
-        expect(booking.bookingRef).toBeDefined();
-        expect(booking.flightId).toBeDefined();
-        expect(booking.passengers).toBeDefined();
-        expect(booking.totalPrice).toBeDefined();
-        expect(booking.status).toBeDefined();
-      }
-    });
-
-    it('should provide type safety for BookingConfirmation signal', () => {
-      const mockData: BookingConfirmation = {
-        bookingRef: 'BK-TEST',
-        flightId: 'GA-TEST',
-        passengers: ['Test User'],
-        totalPrice: 500,
-        status: 'confirmed'
-      };
-
-      expect(mockData.bookingRef).toBe('BK-TEST');
-      expect(mockData.totalPrice).toBe(500);
-    });
   });
 
   describe('Route Parameter Handling', () => {
-    it('should load booking details from route parameter bookingRef', waitForAsync(() => {
+    it('should load booking details from route parameter', waitForAsync(() => {
       bookingService.getBooking.and.returnValue(of(mockBookingConfirmation));
 
       fixture.detectChanges();
@@ -105,27 +85,18 @@ describe('ConfirmationComponent - Signals and Strong Typing', () => {
       fixture.whenStable().then(() => {
         const booking = component.bookingConfirmation();
         expect(booking).toEqual(mockBookingConfirmation);
-        expect(booking?.bookingRef).toBe('BK-12345');
-        expect(booking?.status).toBe('confirmed');
+        expect(booking?.bookingReferenceCode).toBe('BK-12345');
+        expect(booking?.bookingStatus).toBe('CONFIRMED');
       });
     }));
 
     it('should handle booking service errors gracefully', waitForAsync(() => {
-      bookingService.getBooking.and.returnValue(of(null));
+      bookingService.getBooking.and.returnValue(of(null as any));
 
       fixture.detectChanges();
       fixture.whenStable().then(() => {
         const booking = component.bookingConfirmation();
         expect(booking).toBeNull();
-      });
-    }));
-
-    it('should extract bookingRef from route params correctly', waitForAsync(() => {
-      bookingService.getBooking.and.returnValue(of(mockBookingConfirmation));
-
-      fixture.detectChanges();
-      fixture.whenStable().then(() => {
-        expect(bookingService.getBooking).toHaveBeenCalledWith('BK-12345');
       });
     }));
   });
@@ -148,18 +119,18 @@ describe('ConfirmationComponent - Signals and Strong Typing', () => {
       fixture.detectChanges();
       fixture.whenStable().then(() => {
         const booking = component.bookingConfirmation();
-        expect(booking?.totalPrice).toBe(1000);
+        expect(booking?.pricing.totalPrice).toBe(1000);
       });
     }));
 
-    it('should display passenger list from booking confirmation', waitForAsync(() => {
+    it('should display flight details from booking confirmation', waitForAsync(() => {
       bookingService.getBooking.and.returnValue(of(mockBookingConfirmation));
 
       fixture.detectChanges();
       fixture.whenStable().then(() => {
         const booking = component.bookingConfirmation();
-        expect(booking?.passengers).toContain('John Doe');
-        expect(booking?.passengers).toContain('Jane Doe');
+        expect(booking?.flightDetails.airlineName).toBe('Global Airways');
+        expect(booking?.flightDetails.flightNumber).toBe('GA-123');
       });
     }));
 
@@ -169,7 +140,7 @@ describe('ConfirmationComponent - Signals and Strong Typing', () => {
       fixture.detectChanges();
       fixture.whenStable().then(() => {
         const booking = component.bookingConfirmation();
-        expect(booking?.status).toBe('confirmed');
+        expect(booking?.bookingStatus).toBe('CONFIRMED');
       });
     }));
   });

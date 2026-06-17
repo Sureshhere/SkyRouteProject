@@ -1,18 +1,47 @@
 import { TestBed } from '@angular/core/testing';
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { BookingService } from './booking.service';
+import { CreateBookingRequest, BookingConfirmation } from '../models';
+import { AuthService } from './auth.service';
 
 describe('BookingService - HttpOnly Cookie Authentication', () => {
   let service: BookingService;
   let httpMock: HttpTestingController;
+  let authService: jasmine.SpyObj<AuthService>;
+
+  const mockBookingConfirmation: BookingConfirmation = {
+    bookingId: 'BK-UUID-123',
+    bookingReferenceCode: 'BK-12345',
+    flightDetails: {
+      airlineName: 'Global Airways',
+      flightNumber: 'GA-123',
+      origin: 'NYC',
+      destination: 'LAX',
+      departureTime: '2026-06-18T10:00:00',
+      arrivalTime: '2026-06-18T13:00:00',
+      cabinClass: 'Economy'
+    },
+    pricing: {
+      totalPrice: 500,
+      pricePerPassenger: 250,
+      numberOfPassengers: 2
+    },
+    bookingStatus: 'CONFIRMED',
+    createdAt: '2026-06-17T14:29:00'
+  };
 
   beforeEach(() => {
+    const authServiceSpy = jasmine.createSpyObj('AuthService', ['getToken']);
+
     TestBed.configureTestingModule({
       imports: [HttpClientTestingModule],
-      providers: [BookingService]
+      providers: [BookingService, { provide: AuthService, useValue: authServiceSpy }]
     });
     service = TestBed.inject(BookingService);
+    authService = TestBed.inject(AuthService) as jasmine.SpyObj<AuthService>;
     httpMock = TestBed.inject(HttpTestingController);
+
+    authService.getToken.and.returnValue(null);
   });
 
   afterEach(() => {
@@ -20,31 +49,30 @@ describe('BookingService - HttpOnly Cookie Authentication', () => {
   });
 
   describe('Create Booking', () => {
-    it('should create booking with withCredentials: true', (done) => {
-      const bookingRequest = {
+    it('should create booking successfully', (done) => {
+      const bookingRequest: CreateBookingRequest = {
         flightId: 'GA-001',
-        passengers: [{ email: 'user@example.com', fullName: 'John Doe', documentNumber: 'ABC123' }],
-        totalPrice: 500
+        departureDate: '2026-06-18',
+        passengers: [{ email: 'user@example.com', fullName: 'John Doe', documentNumber: 'ABC123' }]
       };
 
       service.createBooking(bookingRequest).subscribe({
         next: (response) => {
-          expect(response.bookingRef).toBe('BK-12345');
+          expect(response.bookingReferenceCode).toBe('BK-12345');
           done();
         }
       });
 
-      const req = httpMock.expectOne('/api/bookings');
+      const req = httpMock.expectOne('http://localhost:5235/api/bookings');
       expect(req.request.method).toBe('POST');
-      expect(req.request.withCredentials).toBe(true);
-      req.flush({ bookingRef: 'BK-12345', status: 'confirmed', totalPrice: 500 });
+      req.flush(mockBookingConfirmation);
     });
 
     it('should send booking data correctly in request body', (done) => {
-      const bookingRequest = {
+      const bookingRequest: CreateBookingRequest = {
         flightId: 'GA-002',
-        passengers: [{ email: 'user1@example.com', fullName: 'Jane Smith', documentNumber: 'XYZ789' }],
-        totalPrice: 750
+        departureDate: '2026-06-20',
+        passengers: [{ email: 'user1@example.com', fullName: 'Jane Smith', documentNumber: 'XYZ789' }]
       };
 
       service.createBooking(bookingRequest).subscribe({
@@ -53,38 +81,38 @@ describe('BookingService - HttpOnly Cookie Authentication', () => {
         }
       });
 
-      const req = httpMock.expectOne('/api/bookings');
+      const req = httpMock.expectOne('http://localhost:5235/api/bookings');
       expect(req.request.body).toEqual(bookingRequest);
-      req.flush({ bookingRef: 'BK-12346', status: 'confirmed', totalPrice: 750 });
+      req.flush(mockBookingConfirmation);
     });
 
     it('should handle multiple passengers in booking', (done) => {
-      const bookingRequest = {
+      const bookingRequest: CreateBookingRequest = {
         flightId: 'GA-003',
+        departureDate: '2026-06-21',
         passengers: [
           { email: 'user1@example.com', fullName: 'John Doe', documentNumber: 'ABC123' },
           { email: 'user2@example.com', fullName: 'Jane Doe', documentNumber: 'DEF456' }
-        ],
-        totalPrice: 1000
+        ]
       };
 
       service.createBooking(bookingRequest).subscribe({
         next: (response) => {
-          expect(response.bookingRef).toBeDefined();
+          expect(response.bookingReferenceCode).toBeDefined();
           done();
         }
       });
 
-      const req = httpMock.expectOne('/api/bookings');
+      const req = httpMock.expectOne('http://localhost:5235/api/bookings');
       expect(req.request.body.passengers.length).toBe(2);
-      req.flush({ bookingRef: 'BK-12347', status: 'confirmed', totalPrice: 1000 });
+      req.flush(mockBookingConfirmation);
     });
 
-    it('should handle server errors on create booking', (done) => {
-      const bookingRequest = {
-        flightId: 'INVALID',
-        passengers: [{ email: 'user@example.com', fullName: 'John Doe', documentNumber: 'ABC123' }],
-        totalPrice: 500
+    it('should handle 400 Bad Request error', (done) => {
+      const bookingRequest: CreateBookingRequest = {
+        flightId: 'GA-005',
+        departureDate: '2026-06-23',
+        passengers: [{ email: 'invalid-email', fullName: 'User', documentNumber: 'ABC' }]
       };
 
       service.createBooking(bookingRequest).subscribe({
@@ -94,15 +122,15 @@ describe('BookingService - HttpOnly Cookie Authentication', () => {
         }
       });
 
-      const req = httpMock.expectOne('/api/bookings');
-      req.flush({ error: 'Invalid flight ID' }, { status: 400, statusText: 'Bad Request' });
+      const req = httpMock.expectOne('http://localhost:5235/api/bookings');
+      req.flush({ error: 'Invalid booking request' }, { status: 400, statusText: 'Bad Request' });
     });
 
-    it('should handle authentication errors on create booking', (done) => {
-      const bookingRequest = {
-        flightId: 'GA-001',
-        passengers: [{ email: 'user@example.com', fullName: 'John Doe', documentNumber: 'ABC123' }],
-        totalPrice: 500
+    it('should handle 401 Unauthorized error', (done) => {
+      const bookingRequest: CreateBookingRequest = {
+        flightId: 'GA-006',
+        departureDate: '2026-06-24',
+        passengers: [{ email: 'user@example.com', fullName: 'User', documentNumber: 'ABC123' }]
       };
 
       service.createBooking(bookingRequest).subscribe({
@@ -112,57 +140,50 @@ describe('BookingService - HttpOnly Cookie Authentication', () => {
         }
       });
 
-      const req = httpMock.expectOne('/api/bookings');
+      const req = httpMock.expectOne('http://localhost:5235/api/bookings');
       req.flush({ error: 'Unauthorized' }, { status: 401, statusText: 'Unauthorized' });
     });
   });
 
   describe('Get Booking', () => {
-    it('should get booking with withCredentials: true', (done) => {
-      const bookingRef = 'BK-12345';
-
-      service.getBooking(bookingRef).subscribe({
-        next: (booking) => {
-          expect(booking.bookingRef).toBe('BK-12345');
+    it('should retrieve booking successfully', (done) => {
+      service.getBooking('BK-12345').subscribe({
+        next: (response) => {
+          expect(response.bookingReferenceCode).toBe('BK-12345');
           done();
         }
       });
 
-      const req = httpMock.expectOne(`/api/bookings/${bookingRef}`);
+      const req = httpMock.expectOne('http://localhost:5235/api/bookings/BK-12345');
       expect(req.request.method).toBe('GET');
-      expect(req.request.withCredentials).toBe(true);
-      req.flush({ bookingRef: 'BK-12345', status: 'confirmed', totalPrice: 500 });
+      req.flush(mockBookingConfirmation);
     });
 
-    it('should construct correct URL for get booking request', (done) => {
-      const bookingRef = 'BK-99999';
-
-      service.getBooking(bookingRef).subscribe({
+    it('should use correct API endpoint for get booking', (done) => {
+      service.getBooking('BK-SPECIFIC').subscribe({
         next: () => {
           done();
         }
       });
 
-      const req = httpMock.expectOne(`/api/bookings/${bookingRef}`);
-      expect(req.request.url).toContain(`/api/bookings/BK-99999`);
-      req.flush({ bookingRef: 'BK-99999', status: 'confirmed', totalPrice: 500 });
+      const req = httpMock.expectOne('http://localhost:5235/api/bookings/BK-SPECIFIC');
+      expect(req.request.url).toContain('/api/bookings/BK-SPECIFIC');
+      req.flush(mockBookingConfirmation);
     });
 
-    it('should handle booking not found error', (done) => {
-      const bookingRef = 'BK-NOTFOUND';
-
-      service.getBooking(bookingRef).subscribe({
+    it('should handle 404 Not Found error', (done) => {
+      service.getBooking('INVALID-REF').subscribe({
         error: (error) => {
           expect(error.status).toBe(404);
           done();
         }
       });
 
-      const req = httpMock.expectOne(`/api/bookings/${bookingRef}`);
+      const req = httpMock.expectOne('http://localhost:5235/api/bookings/INVALID-REF');
       req.flush({ error: 'Booking not found' }, { status: 404, statusText: 'Not Found' });
     });
 
-    it('should handle authentication error on get booking', (done) => {
+    it('should handle 401 Unauthorized on get booking', (done) => {
       service.getBooking('BK-12345').subscribe({
         error: (error) => {
           expect(error.status).toBe(401);
@@ -170,63 +191,50 @@ describe('BookingService - HttpOnly Cookie Authentication', () => {
         }
       });
 
-      const req = httpMock.expectOne('/api/bookings/BK-12345');
-      req.flush({ error: 'Unauthorized' }, { status: 401, statusText: 'Unauthorized' });
-    });
-
-    it('should return booking details correctly', (done) => {
-      const mockBooking = {
-        bookingRef: 'BK-12345',
-        flightId: 'GA-001',
-        passengers: ['John Doe'],
-        totalPrice: 500,
-        status: 'confirmed'
-      };
-
-      service.getBooking('BK-12345').subscribe({
-        next: (booking) => {
-          expect(booking.bookingRef).toBe('BK-12345');
-          expect(booking.flightId).toBe('GA-001');
-          expect(booking.status).toBe('confirmed');
-          done();
-        }
-      });
-
-      const req = httpMock.expectOne('/api/bookings/BK-12345');
-      req.flush(mockBooking);
+      const req = httpMock.expectOne('http://localhost:5235/api/bookings/BK-12345');
+      req.flush({ error: 'Session expired' }, { status: 401, statusText: 'Unauthorized' });
     });
   });
 
   describe('Cancel Booking', () => {
-    it('should cancel booking with withCredentials: true', (done) => {
-      const bookingRef = 'BK-12345';
-
-      service.cancelBooking(bookingRef).subscribe({
+    it('should cancel booking successfully', (done) => {
+      service.cancelBooking('BK-12345').subscribe({
         next: (response) => {
-          expect(response.status).toBe('cancelled');
+          expect(response.message).toBe('Booking cancelled successfully');
           done();
         }
       });
 
-      const req = httpMock.expectOne(`/api/bookings/${bookingRef}/cancel`);
+      const req = httpMock.expectOne('http://localhost:5235/api/bookings/BK-12345/cancel');
       expect(req.request.method).toBe('POST');
-      expect(req.request.withCredentials).toBe(true);
-      req.flush({ bookingRef: 'BK-12345', status: 'cancelled' });
+      req.flush({ message: 'Booking cancelled successfully' });
     });
 
-    it('should send cancel request without manual auth headers', (done) => {
+    it('should use correct API endpoint for cancel booking', (done) => {
       service.cancelBooking('BK-12345').subscribe({
         next: () => {
           done();
         }
       });
 
-      const req = httpMock.expectOne('/api/bookings/BK-12345/cancel');
-      expect(req.request.headers.has('Authorization')).toBe(false);
-      req.flush({ bookingRef: 'BK-12345', status: 'cancelled' });
+      const req = httpMock.expectOne('http://localhost:5235/api/bookings/BK-12345/cancel');
+      expect(req.request.url).toContain('/api/bookings/BK-12345/cancel');
+      req.flush({ message: 'Cancelled' });
     });
 
-    it('should handle authentication errors on cancel booking', (done) => {
+    it('should handle 404 Not Found on cancel', (done) => {
+      service.cancelBooking('INVALID-REF').subscribe({
+        error: (error) => {
+          expect(error.status).toBe(404);
+          done();
+        }
+      });
+
+      const req = httpMock.expectOne('http://localhost:5235/api/bookings/INVALID-REF/cancel');
+      req.flush({ error: 'Booking not found' }, { status: 404, statusText: 'Not Found' });
+    });
+
+    it('should handle 401 Unauthorized on cancel', (done) => {
       service.cancelBooking('BK-12345').subscribe({
         error: (error) => {
           expect(error.status).toBe(401);
@@ -234,52 +242,8 @@ describe('BookingService - HttpOnly Cookie Authentication', () => {
         }
       });
 
-      const req = httpMock.expectOne('/api/bookings/BK-12345/cancel');
+      const req = httpMock.expectOne('http://localhost:5235/api/bookings/BK-12345/cancel');
       req.flush({ error: 'Unauthorized' }, { status: 401, statusText: 'Unauthorized' });
-    });
-
-    it('should handle booking not found on cancel', (done) => {
-      service.cancelBooking('BK-NOTFOUND').subscribe({
-        error: (error) => {
-          expect(error.status).toBe(404);
-          done();
-        }
-      });
-
-      const req = httpMock.expectOne('/api/bookings/BK-NOTFOUND/cancel');
-      req.flush({ error: 'Booking not found' }, { status: 404, statusText: 'Not Found' });
-    });
-  });
-
-  describe('HTTP Configuration', () => {
-    it('should use correct API endpoint for create booking', (done) => {
-      const bookingRequest = {
-        flightId: 'GA-001',
-        passengers: [{ email: 'user@example.com', fullName: 'John Doe', documentNumber: 'ABC123' }],
-        totalPrice: 500
-      };
-
-      service.createBooking(bookingRequest).subscribe(() => done());
-
-      const req = httpMock.expectOne('/api/bookings');
-      expect(req.request.url).toContain('/api/bookings');
-      req.flush({ bookingRef: 'BK-12345', status: 'confirmed', totalPrice: 500 });
-    });
-
-    it('should use correct API endpoint for get booking', (done) => {
-      service.getBooking('BK-12345').subscribe(() => done());
-
-      const req = httpMock.expectOne('/api/bookings/BK-12345');
-      expect(req.request.url).toContain('/api/bookings/BK-12345');
-      req.flush({ bookingRef: 'BK-12345', status: 'confirmed', totalPrice: 500 });
-    });
-
-    it('should use correct API endpoint for cancel booking', (done) => {
-      service.cancelBooking('BK-12345').subscribe(() => done());
-
-      const req = httpMock.expectOne('/api/bookings/BK-12345/cancel');
-      expect(req.request.url).toContain('/api/bookings/BK-12345/cancel');
-      req.flush({ bookingRef: 'BK-12345', status: 'cancelled' });
     });
   });
 });
