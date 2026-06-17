@@ -1,8 +1,7 @@
 import { Injectable } from '@angular/core';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { CreateBookingRequest, BookingConfirmation } from '../models';
-import { AuthService } from './auth.service';
 
 @Injectable({
   providedIn: 'root'
@@ -10,27 +9,18 @@ import { AuthService } from './auth.service';
 export class BookingService {
   private apiUrl = 'http://localhost:5235/api/bookings';
 
-  constructor(private http: HttpClient, private authService: AuthService) { }
+  constructor(private http: HttpClient) { }
 
   createBooking(req: CreateBookingRequest): Observable<BookingConfirmation> {
-    const headers = new HttpHeaders({
-      'Authorization': `Bearer ${this.authService.getToken()}`
-    });
-    return this.http.post<BookingConfirmation>(this.apiUrl, req, { headers });
+    return this.http.post<BookingConfirmation>(this.apiUrl, req, { withCredentials: true });
   }
 
   getBooking(id: string): Observable<BookingConfirmation> {
-    const headers = new HttpHeaders({
-      'Authorization': `Bearer ${this.authService.getToken()}`
-    });
-    return this.http.get<BookingConfirmation>(`${this.apiUrl}/${id}`, { headers });
+    return this.http.get<BookingConfirmation>(`${this.apiUrl}/${id}`, { withCredentials: true });
   }
 
   cancelBooking(id: string): Observable<{ message: string }> {
-    const headers = new HttpHeaders({
-      'Authorization': `Bearer ${this.authService.getToken()}`
-    });
-    return this.http.delete<{ message: string }>(`${this.apiUrl}/${id}`, { headers });
+    return this.http.delete<{ message: string }>(`${this.apiUrl}/${id}`, { withCredentials: true });
   }
 
   isDomesticRoute(originCountryCode: string, destCountryCode: string): boolean {

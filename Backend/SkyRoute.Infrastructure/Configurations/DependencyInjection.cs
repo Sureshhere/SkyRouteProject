@@ -79,6 +79,15 @@ public static class DependencyInjection
                 ValidateLifetime         = true,
                 ClockSkew                = TimeSpan.Zero
             };
+            options.Events = new JwtBearerEvents
+            {
+                OnMessageReceived = ctx =>
+                {
+                    if (string.IsNullOrEmpty(ctx.Token))
+                        ctx.Token = ctx.Request.Cookies["auth_token"];
+                    return Task.CompletedTask;
+                }
+            };
         });
 
         return services;
