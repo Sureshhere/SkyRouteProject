@@ -208,6 +208,13 @@ import { BookingService } from '../services/booking.service';
 import { FlightService } from '../services/flight.service';
 import { FlightResult } from '../models';
 
+// Hardcoded airport code → country code mapping (matches seeded airport data)
+const AIRPORT_COUNTRY: Record<string, string> = {
+  JFK: 'US', LAX: 'US', ORD: 'US',
+  LHR: 'GB',
+  BOM: 'IN', DEL: 'IN'
+};
+
 @Component({
   selector: 'app-booking',
   standalone: true,
@@ -233,6 +240,11 @@ import { FlightResult } from '../models';
           <div class="b-price">USD {{ flight()!.pricing.totalPrice.toFixed(2) }}</div>
           <div class="b-price-small">USD {{ flight()!.pricing.pricePerPassenger.toFixed(2) }} / person</div>
         </div>
+      </div>
+
+      <div class="alert alert-info" *ngIf="flight()" style="margin-bottom: 20px;">
+        <strong>{{ isDomestic() ? 'Domestic Flight' : 'International Flight' }}</strong>
+        — {{ isDomestic() ? 'National ID required for each passenger' : 'Passport Number required for each passenger' }}
       </div>
 
       <form [formGroup]="form" (ngSubmit)="submitBooking()" *ngIf="form">
@@ -264,13 +276,14 @@ import { FlightResult } from '../models';
               </div>
 
               <div class="form-group">
-                <label>Document Number</label>
-                <input type="text" formControlName="documentNumber" placeholder="e.g. AB1234567 or P9876543">
+                <label>{{ isDomestic() ? 'National ID' : 'Passport Number' }}</label>
+                <input type="text" formControlName="documentNumber"
+                       [placeholder]="isDomestic() ? 'e.g. AB12345678 (8–12 characters)' : 'e.g. AB123456 (6–9 characters)'">
                 <div class="error" *ngIf="passenger.get('documentNumber')?.hasError('required') && passenger.get('documentNumber')?.touched">
-                  Document number is required
+                  {{ isDomestic() ? 'National ID is required' : 'Passport Number is required' }}
                 </div>
                 <div class="error" *ngIf="passenger.get('documentNumber')?.hasError('pattern') && passenger.get('documentNumber')?.touched">
-                  Must be 6–12 alphanumeric characters (passport or national ID number)
+                  {{ isDomestic() ? 'National ID must be 8–12 alphanumeric characters' : 'Passport Number must be 6–9 alphanumeric characters' }}
                 </div>
               </div>
             </div>
@@ -295,6 +308,14 @@ export class BookingComponent implements OnInit {
   loading = signal(false);
   error = signal<string | null>(null);
   departureDate = '';
+
+  isDomestic = computed(() => {
+    const f = this.flight();
+    if (!f) return false;
+    const originCountry = AIRPORT_COUNTRY[f.originCode.toUpperCase()];
+    const destCountry = AIRPORT_COUNTRY[f.destinationCode.toUpperCase()];
+    return !!originCountry && !!destCountry && originCountry === destCountry;
+  });
 
   get passengersArray() {
     return this.form?.get('passengers') as FormArray;
@@ -331,10 +352,15 @@ export class BookingComponent implements OnInit {
   }
 
   private createPassengerGroup(): FormGroup {
+    // Pattern matches backend rules: National ID 8–12, Passport 6–9 alphanumeric
+    const pattern = this.isDomestic()
+      ? /^[A-Za-z0-9]{8,12}$/
+      : /^[A-Za-z0-9]{6,9}$/;
+
     return this.fb.group({
       fullName: ['', Validators.required],
       email: ['', [Validators.required, Validators.email]],
-      documentNumber: ['', [Validators.required, Validators.pattern(/^[A-Za-z0-9]{6,12}$/)]]
+      documentNumber: ['', [Validators.required, Validators.pattern(pattern)]]
     });
   }
 
