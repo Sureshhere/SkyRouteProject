@@ -15,55 +15,65 @@ jobs:
       pull-requests: write
       issues: write
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Extract branch info
-        id: branch
-        run: |
-          BRANCH_NAME=${GITHUB_REF#refs/heads/}
-          # Extract PR title from branch name (feature/xyz -> xyz)
-          PR_TITLE=$(echo "$BRANCH_NAME" | sed 's/[^/]*\///' | tr '-' ' ' | sed 's/\b\(.\)/\u\1/g')
-          # Determine PR type and base branch
-          if [[ "$BRANCH_NAME" == feature/* ]]; then
-            PR_TYPE="Feature"
-            BASE_BRANCH="develop"
-          elif [[ "$BRANCH_NAME" == fix/* ]]; then
-            PR_TYPE="Fix"
-            BASE_BRANCH="develop"
-          elif [[ "$BRANCH_NAME" == chore/* ]]; then
-            PR_TYPE="Chore"
-            BASE_BRANCH="develop"
-          fi
-          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
-          echo "pr_title=$PR_TITLE" >> $GITHUB_OUTPUT
-          echo "pr_type=$PR_TYPE" >> $GITHUB_OUTPUT
-          echo "base_branch=$BASE_BRANCH" >> $GITHUB_OUTPUT
-
       - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v5
+        uses: actions/github-script@v7
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: 'Auto-created PR from ${{ steps.branch.outputs.branch_name }}'
-          title: '${{ steps.branch.outputs.pr_type }}: ${{ steps.branch.outputs.pr_title }}'
-          body: |
-            ## Auto-generated Pull Request
-
-            This PR was automatically created from branch `${{ steps.branch.outputs.branch_name }}`.
-
-            ### Checklist
-            - [ ] Code follows project style guidelines
-            - [ ] Changes are self-documented
-            - [ ] No new warnings generated
-            - [ ] Tests added/updated for new functionality
-            - [ ] Documentation updated if needed
-
-            ---
-            *This PR will be reviewed by GitHub Copilot and CI/CD checks will run automatically.*
-          branch: ${{ steps.branch.outputs.branch_name }}
-          base: ${{ steps.branch.outputs.base_branch }}
-          draft: false
-          delete-branch: false
-          reviewers: Sureshhere
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const branch = context.ref.replace('refs/heads/', '');
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            
+            // Extract PR details from branch name
+            const parts = branch.split('/');
+            const branchType = parts[0]; // feature, fix, chore
+            const branchName = parts.slice(1).join('-');
+            
+            const typeMap = {
+              'feature': 'Feature',
+              'fix': 'Fix',
+              'chore': 'Chore'
+            };
+            
+            const prType = typeMap[branchType] || 'Update';
+            const prTitle = `${prType}: ${branchName.replace(/-/g, ' ')}`;
+            
+            try {
+              // Check if PR already exists
+              const prs = await github.rest.pulls.list({
+                owner,
+                repo,
+                head: `${owner}:${branch}`,
+                state: 'open'
+              });
+              
+              if (prs.data.length > 0) {
+                console.log(`PR already exists: #${prs.data[0].number}`);
+                return;
+              }
+              
+              // Create new PR
+              const pr = await github.rest.pulls.create({
+                owner,
+                repo,
+                title: prTitle,
+                head: branch,
+                base: 'develop',
+                body: `## Auto-generated Pull Request\n\nThis PR was automatically created from branch \`${branch}\`.\n\n### Checklist\n- [ ] Code follows project style guidelines\n- [ ] Changes are self-documented\n- [ ] No new warnings generated\n- [ ] Tests added/updated for new functionality\n- [ ] Documentation updated if needed\n\n---\n*This PR will be reviewed by GitHub Copilot and CI/CD checks will run automatically.*`
+              });
+              
+              console.log(`✅ PR created: #${pr.data.number}`);
+              
+              // Add reviewer
+              await github.rest.pulls.requestReviewers({
+                owner,
+                repo,
+                pull_number: pr.data.number,
+                reviewers: ['Sureshhere']
+              });
+              
+              console.log(`✅ Reviewer requested`);
+            } catch (error) {
+              console.error('Error creating PR:', error.message);
+              throw error;
+            }
