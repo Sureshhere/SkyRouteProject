@@ -13,24 +13,17 @@ jobs:
     name: Copilot Review
     runs-on: ubuntu-latest
     steps:
-      - name: Request Copilot as reviewer
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const pr = context.payload.pull_request.number;
-            const owner = context.repo.owner;
-            const repo = context.repo.repo;
-
-            try {
-              await github.rest.pulls.requestReviewers({
-                owner,
-                repo,
-                pull_number: pr,
-                reviewers: ['copilot']
-              });
-              console.log('✅ Copilot review requested on PR #' + pr);
-            } catch (error) {
-              // Copilot reviewer may not be available on all plans — non-fatal
-              console.warn('⚠️ Could not request Copilot review:', error.message);
-            }
+      - name: Copilot Review Instructions
+        run: |
+          echo "==========================================="
+          echo "  Copilot PR Code Review"
+          echo "==========================================="
+          echo ""
+          echo "  To trigger Copilot review on this PR:"
+          echo "  1. Open the PR on GitHub"
+          echo "  2. Click ⚙️ gear next to 'Reviewers'"
+          echo "  3. Search for 'Copilot' and select it"
+          echo ""
+          echo "  Automated Copilot reviews require"
+          echo "  GitHub Copilot Enterprise plan."
+          echo "==========================================="
