@@ -11,8 +11,9 @@ jobs:
   create-pr:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       pull-requests: write
+      issues: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -44,6 +45,7 @@ jobs:
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v5
         with:
+          token: ${{ secrets.GITHUB_TOKEN }}
           commit-message: 'Auto-created PR from ${{ steps.branch.outputs.branch_name }}'
           title: '${{ steps.branch.outputs.pr_type }}: ${{ steps.branch.outputs.pr_title }}'
           body: |
