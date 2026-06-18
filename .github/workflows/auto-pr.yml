@@ -1,0 +1,67 @@
+name: Auto Create Pull Request
+
+on:
+  push:
+    branches:
+      - 'feature/**'
+      - 'fix/**'
+      - 'chore/**'
+
+jobs:
+  create-pr:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract branch info
+        id: branch
+        run: |
+          BRANCH_NAME=${GITHUB_REF#refs/heads/}
+          # Extract PR title from branch name (feature/xyz -> xyz)
+          PR_TITLE=$(echo "$BRANCH_NAME" | sed 's/[^/]*\///' | tr '-' ' ' | sed 's/\b\(.\)/\u\1/g')
+          # Determine PR type and base branch
+          if [[ "$BRANCH_NAME" == feature/* ]]; then
+            PR_TYPE="Feature"
+            BASE_BRANCH="develop"
+          elif [[ "$BRANCH_NAME" == fix/* ]]; then
+            PR_TYPE="Fix"
+            BASE_BRANCH="develop"
+          elif [[ "$BRANCH_NAME" == chore/* ]]; then
+            PR_TYPE="Chore"
+            BASE_BRANCH="develop"
+          fi
+          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+          echo "pr_title=$PR_TITLE" >> $GITHUB_OUTPUT
+          echo "pr_type=$PR_TYPE" >> $GITHUB_OUTPUT
+          echo "base_branch=$BASE_BRANCH" >> $GITHUB_OUTPUT
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v5
+        with:
+          commit-message: 'Auto-created PR from ${{ steps.branch.outputs.branch_name }}'
+          title: '${{ steps.branch.outputs.pr_type }}: ${{ steps.branch.outputs.pr_title }}'
+          body: |
+            ## Auto-generated Pull Request
+
+            This PR was automatically created from branch `${{ steps.branch.outputs.branch_name }}`.
+
+            ### Checklist
+            - [ ] Code follows project style guidelines
+            - [ ] Changes are self-documented
+            - [ ] No new warnings generated
+            - [ ] Tests added/updated for new functionality
+            - [ ] Documentation updated if needed
+
+            ---
+            *This PR will be reviewed by GitHub Copilot and CI/CD checks will run automatically.*
+          branch: ${{ steps.branch.outputs.branch_name }}
+          base: ${{ steps.branch.outputs.base_branch }}
+          draft: false
+          delete-branch: false
+          reviewers: Sureshhere
