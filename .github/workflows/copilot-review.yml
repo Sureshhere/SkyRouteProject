@@ -1,0 +1,29 @@
+name: Copilot Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  pull-requests: write
+  contents: read
+
+jobs:
+  copilot-review:
+    name: Copilot Review
+    runs-on: ubuntu-latest
+    steps:
+      - name: Copilot Review Instructions
+        run: |
+          echo "==========================================="
+          echo "  Copilot PR Code Review"
+          echo "==========================================="
+          echo ""
+          echo "  To trigger Copilot review on this PR:"
+          echo "  1. Open the PR on GitHub"
+          echo "  2. Click ⚙️ gear next to 'Reviewers'"
+          echo "  3. Search for 'Copilot' and select it"
+          echo ""
+          echo "  Automated Copilot reviews require"
+          echo "  GitHub Copilot Enterprise plan."
+          echo "==========================================="
