@@ -13,10 +13,24 @@ jobs:
     name: Copilot Review
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - name: Request Copilot as reviewer
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const pr = context.payload.pull_request.number;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
 
-      - name: Run Copilot Review
-        uses: github/copilot-code-review-action@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            try {
+              await github.rest.pulls.requestReviewers({
+                owner,
+                repo,
+                pull_number: pr,
+                reviewers: ['copilot']
+              });
+              console.log('✅ Copilot review requested on PR #' + pr);
+            } catch (error) {
+              // Copilot reviewer may not be available on all plans — non-fatal
+              console.warn('⚠️ Could not request Copilot review:', error.message);
+            }
