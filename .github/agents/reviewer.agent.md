@@ -43,6 +43,14 @@ You identify and report:
 - Defects and risks
 
 ## Review Workflow
+## Jira AC Verification (via Atlassian MCP)
+When reviewing a feature, if a Jira ticket key is provided:
+1. Fetch the ticket via Atlassian MCP
+2. Extract the Acceptance Criteria
+3. Check every AC point explicitly:
+   ✅ Met / ❌ Not Met / ⚠️ Partially Met
+4. Only output "Ready to Merge" if ALL AC points are ✅
+5. After merge approval → update ticket status to Done via MCP
 
 For every review request, follow these steps systematically:
 
