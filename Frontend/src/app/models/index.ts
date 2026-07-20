@@ -56,6 +56,19 @@ export interface PassengerDetail {
   fullName: string;
   email: string;
   documentNumber: string;
+  seatNumber: string;
+}
+
+export interface SeatAvailability {
+  flightId: string;
+  departureDate: string;
+  cabinClass: string;
+  availableSeats: string[];
+}
+
+export interface PassengerConfirmation {
+  fullName: string;
+  seatNumber: string;
 }
 
 export interface CreateBookingRequest {
@@ -83,6 +96,7 @@ export interface BookingConfirmation {
   };
   bookingStatus: string;
   createdAt: string;
+  passengers?: PassengerConfirmation[];
 }
 
 export interface SortOption {

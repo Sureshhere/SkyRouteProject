@@ -47,7 +47,8 @@ public class BookingServiceTests
             {
                 FullName = $"Passenger {i}",
                 Email = $"passenger{i}@test.com",
-                DocumentNumber = documentNumber
+                DocumentNumber = documentNumber,
+                SeatNumber = $"{i}A"
             }).ToList()
     };
 
@@ -57,6 +58,7 @@ public class BookingServiceTests
         var flight = MakeFlight("GlobalAir", "US", "US"); // domestic
         _flightRepoMock.Setup(r => r.GetByIdAsync(flight.Id)).ReturnsAsync(flight);
         _bookingRepoMock.Setup(r => r.AddAsync(It.IsAny<Booking>())).ReturnsAsync((Booking b) => b);
+        _bookingRepoMock.Setup(r => r.GetOccupiedSeatsAsync(flight.Id, It.IsAny<DateOnly>())).ReturnsAsync(new List<string>());
 
         var request = MakeRequest(flight.Id, "AB123456"); // valid National ID
         var service = CreateService();
@@ -74,6 +76,7 @@ public class BookingServiceTests
         var flight = MakeFlight("GlobalAir", "US", "GB"); // international
         _flightRepoMock.Setup(r => r.GetByIdAsync(flight.Id)).ReturnsAsync(flight);
         _bookingRepoMock.Setup(r => r.AddAsync(It.IsAny<Booking>())).ReturnsAsync((Booking b) => b);
+        _bookingRepoMock.Setup(r => r.GetOccupiedSeatsAsync(flight.Id, It.IsAny<DateOnly>())).ReturnsAsync(new List<string>());
 
         var request = MakeRequest(flight.Id, "A1234567"); // valid Passport
         var service = CreateService();
@@ -116,6 +119,7 @@ public class BookingServiceTests
         var flight = MakeFlight("GlobalAir", "US", "US");
         _flightRepoMock.Setup(r => r.GetByIdAsync(flight.Id)).ReturnsAsync(flight);
         _bookingRepoMock.Setup(r => r.AddAsync(It.IsAny<Booking>())).ReturnsAsync((Booking b) => b);
+        _bookingRepoMock.Setup(r => r.GetOccupiedSeatsAsync(flight.Id, It.IsAny<DateOnly>())).ReturnsAsync(new List<string>());
 
         var request = MakeRequest(flight.Id, "AB123456", passengerCount: 3);
         var service = CreateService();

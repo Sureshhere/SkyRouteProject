@@ -1,7 +1,8 @@
-﻿import { Component, signal, computed, OnInit } from '@angular/core';
+import { Component, signal, computed, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormBuilder, FormGroup, Validators, FormArray } from '@angular/forms';
 import { Router } from '@angular/router';
+import { HttpErrorResponse } from '@angular/common/http';
 import { BookingService } from '../services/booking.service';
 import { FlightService } from '../services/flight.service';
 import { FlightResult } from '../models';
@@ -84,12 +85,36 @@ const AIRPORT_COUNTRY: Record<string, string> = {
                   {{ isDomestic() ? 'National ID must be 8–12 alphanumeric characters' : 'Passport Number must be 6–9 alphanumeric characters' }}
                 </div>
               </div>
+
+              <div *ngIf="seatsLoading()" style="padding: 8px 0; color: #666; font-size: 13px;">
+                Loading available seats...
+              </div>
+
+              <div *ngIf="seatsError() && i === 0" class="alert alert-error" style="display: flex; align-items: center; gap: 8px;">
+                ⚠ {{ seatsError() }}
+                <button type="button" class="btn-secondary" (click)="loadAvailableSeats()" style="padding: 6px 14px; font-size: 13px; flex-shrink: 0; margin-left: 8px;">Retry</button>
+              </div>
+
+              <div *ngIf="seatsLoaded() && availableSeats().length === 0 && !seatsError() && i === 0" class="alert alert-info">
+                No seats available for this flight.
+              </div>
+
+              <div class="form-group">
+                <label>Select Seat</label>
+                <select formControlName="seatNumber">
+                  <option value="">-- Select a seat --</option>
+                  <option *ngFor="let seat of getAvailableSeatsFor(i)" [value]="seat">{{ seat }}</option>
+                </select>
+                <div class="error" *ngIf="passenger.get('seatNumber')?.hasError('required') && passenger.get('seatNumber')?.touched">
+                  Please select a seat
+                </div>
+              </div>
             </div>
           </div>
         </div>
 
         <div class="booking-actions">
-          <button type="submit" class="btn-confirm" [disabled]="!form.valid || loading()">
+          <button type="submit" class="btn-confirm" [disabled]="!form.valid || loading() || seatsLoading()">
             {{ loading() ? 'Processing...' : 'Confirm Booking' }}
           </button>
           <button type="button" class="btn-secondary" (click)="goBack()" style="padding: 13px 24px;">
@@ -106,6 +131,10 @@ export class BookingComponent implements OnInit {
   loading = signal(false);
   error = signal<string | null>(null);
   departureDate = '';
+  availableSeats = signal<string[]>([]);
+  seatsLoading = signal(false);
+  seatsError = signal<string | null>(null);
+  seatsLoaded = signal(false);
 
   isDomestic = computed(() => {
     const f = this.flight();
@@ -139,6 +168,7 @@ export class BookingComponent implements OnInit {
     this.departureDate = search?.departureDate || new Date().toISOString().split('T')[0];
     const numPassengers = search?.numberOfPassengers || 1;
     this.initializeForm(numPassengers);
+    this.loadAvailableSeats();
   }
 
   private initializeForm(numPassengers: number): void {
@@ -146,6 +176,27 @@ export class BookingComponent implements OnInit {
       passengers: this.fb.array(
         Array.from({ length: numPassengers }, () => this.createPassengerGroup())
       )
+    });
+  }
+
+  loadAvailableSeats(): void {
+    const f = this.flight();
+    if (!f) return;
+    this.seatsLoading.set(true);
+    this.seatsError.set(null);
+    this.flightService.getAvailableSeats(f.id, this.departureDate).subscribe({
+      next: (result) => {
+        this.availableSeats.set(result.availableSeats);
+        this.seatsLoading.set(false);
+        this.seatsLoaded.set(true);
+      },
+      error: (err: HttpErrorResponse) => {
+        this.seatsLoading.set(false);
+        this.seatsLoaded.set(true);
+        this.seatsError.set(err.status === 404
+          ? 'Flight not found. Please go back and select a different flight.'
+          : 'Unable to load available seats. Please try again.');
+      }
     });
   }
 
@@ -158,8 +209,21 @@ export class BookingComponent implements OnInit {
     return this.fb.group({
       fullName: ['', Validators.required],
       email: ['', [Validators.required, Validators.email]],
-      documentNumber: ['', [Validators.required, Validators.pattern(pattern)]]
+      documentNumber: ['', [Validators.required, Validators.pattern(pattern)]],
+      seatNumber: ['', Validators.required]
     });
+  }
+
+  getOtherSelectedSeats(passengerIndex: number): string[] {
+    return this.passengersArray.controls
+      .filter((_, i) => i !== passengerIndex)
+      .map(c => c.get('seatNumber')?.value as string)
+      .filter(s => !!s);
+  }
+
+  getAvailableSeatsFor(passengerIndex: number): string[] {
+    const others = this.getOtherSelectedSeats(passengerIndex);
+    return this.availableSeats().filter(s => !others.includes(s));
   }
 
   submitBooking(): void {
@@ -178,10 +242,12 @@ export class BookingComponent implements OnInit {
       next: (confirmation) => {
         this.router.navigate(['/confirmation'], { state: { confirmation } });
       },
-      error: (err: any) => {
+      error: (err: HttpErrorResponse) => {
         this.loading.set(false);
         if (err.status === 401) {
           this.error.set('Your session has expired. Please log in again to continue.');
+        } else if (err.status === 409) {
+          this.error.set(err.error?.error || 'One or more selected seats are no longer available. Please select different seats.');
         } else if (Array.isArray(err.error?.errors) && err.error.errors.length > 0) {
           this.error.set(err.error.errors.join(' '));
         } else {

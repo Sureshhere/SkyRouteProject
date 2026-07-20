@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using SkyRoute.Application.Interfaces;
+using SkyRoute.Domain.Enums;
 using SkyRoute.Domain.Models;
 using SkyRoute.Infrastructure.Data;
 
@@ -34,4 +35,20 @@ public class BookingRepository : IBookingRepository
     }
 
     public async Task SaveChangesAsync() => await _context.SaveChangesAsync();
+
+    public async Task<IReadOnlyList<string>> GetOccupiedSeatsAsync(Guid flightId, DateOnly departureDate)
+    {
+        var dateStart = departureDate.ToDateTime(TimeOnly.MinValue);
+        var dateEnd = dateStart.AddDays(1);
+        return await _context.Bookings
+            .Where(b => b.FlightId == flightId
+                     && b.DepartureDate >= dateStart
+                     && b.DepartureDate < dateEnd
+                     && b.Status == BookingStatus.Confirmed)
+            .SelectMany(b => b.PassengerDetails)
+            .Where(p => p.SeatNumber != string.Empty)
+            .Select(p => p.SeatNumber)
+            .Distinct()
+            .ToListAsync();
+    }
 }

@@ -53,7 +53,7 @@ describe('BookingService - HttpOnly Cookie Authentication', () => {
       const bookingRequest: CreateBookingRequest = {
         flightId: 'GA-001',
         departureDate: '2026-06-18',
-        passengers: [{ email: 'user@example.com', fullName: 'John Doe', documentNumber: 'ABC123' }]
+        passengers: [{ email: 'user@example.com', fullName: 'John Doe', documentNumber: 'ABC123', seatNumber: '1A' }]
       };
 
       service.createBooking(bookingRequest).subscribe({
@@ -72,7 +72,7 @@ describe('BookingService - HttpOnly Cookie Authentication', () => {
       const bookingRequest: CreateBookingRequest = {
         flightId: 'GA-002',
         departureDate: '2026-06-20',
-        passengers: [{ email: 'user1@example.com', fullName: 'Jane Smith', documentNumber: 'XYZ789' }]
+        passengers: [{ email: 'user1@example.com', fullName: 'Jane Smith', documentNumber: 'XYZ789', seatNumber: '1A' }]
       };
 
       service.createBooking(bookingRequest).subscribe({
@@ -90,7 +90,7 @@ describe('BookingService - HttpOnly Cookie Authentication', () => {
       const bookingRequest: CreateBookingRequest = {
         flightId: 'GA-005',
         departureDate: '2026-06-23',
-        passengers: [{ email: 'invalid-email', fullName: 'User', documentNumber: 'ABC' }]
+        passengers: [{ email: 'invalid-email', fullName: 'User', documentNumber: 'ABC', seatNumber: '1A' }]
       };
 
       service.createBooking(bookingRequest).subscribe({
@@ -108,7 +108,7 @@ describe('BookingService - HttpOnly Cookie Authentication', () => {
       const bookingRequest: CreateBookingRequest = {
         flightId: 'GA-006',
         departureDate: '2026-06-24',
-        passengers: [{ email: 'user@example.com', fullName: 'User', documentNumber: 'ABC123' }]
+        passengers: [{ email: 'user@example.com', fullName: 'User', documentNumber: 'ABC123', seatNumber: '1A' }]
       };
 
       service.createBooking(bookingRequest).subscribe({
