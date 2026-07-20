@@ -49,6 +49,7 @@ public static class DependencyInjection
         services.AddScoped<IAirportService, AirportService>();
         services.AddScoped<IFlightSearchService, FlightSearchService>();
         services.AddScoped<IBookingService, BookingService>();
+        services.AddScoped<ISeatService, SeatService>();
         services.AddScoped<IValidator<RegisterRequestDto>, RegisterRequestValidator>();
         services.AddScoped<IValidator<FlightSearchRequestDto>, FlightSearchValidator>();
         services.AddScoped<IValidator<CreateBookingRequestDto>, CreateBookingValidator>();

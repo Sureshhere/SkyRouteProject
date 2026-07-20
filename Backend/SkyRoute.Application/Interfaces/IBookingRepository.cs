@@ -8,4 +8,5 @@ public interface IBookingRepository
     Task<Booking?> GetByIdAsync(Guid id);
     Task<Booking> AddAsync(Booking booking);
     Task SaveChangesAsync();
+    Task<IReadOnlyList<string>> GetOccupiedSeatsAsync(Guid flightId, DateOnly departureDate);
 }

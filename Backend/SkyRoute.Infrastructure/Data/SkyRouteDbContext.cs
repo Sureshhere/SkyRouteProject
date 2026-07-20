@@ -83,6 +83,7 @@ public class SkyRouteDbContext : DbContext
             e.Property(p => p.Email).IsRequired().HasMaxLength(256);
             e.Property(p => p.DocumentNumber).IsRequired().HasMaxLength(50);
             e.Property(p => p.DocumentType).HasConversion<string>();
+            e.Property(p => p.SeatNumber).IsRequired().HasMaxLength(5).HasDefaultValue(string.Empty);
             e.HasOne(p => p.Booking).WithMany(b => b.PassengerDetails).HasForeignKey(p => p.BookingId);
         });
 
