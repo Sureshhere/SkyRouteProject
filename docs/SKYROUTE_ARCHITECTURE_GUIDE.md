@@ -114,7 +114,6 @@ Users can book a selected flight by providing:
 │  │  - IAuthService                                        │ │
 │  │  - IAirportService                                     │ │
 │  │  - ISeatService                                        │ │
-=======
 │  └─────────────────────────────────────────────────────────┘ │
 │                            ↓                                   │
 │  ┌─────────────────────────────────────────────────────────┐ │
@@ -264,7 +263,6 @@ public interface IBookingRepository
     Task SaveChangesAsync();
     Task<Booking?> GetByReferenceCodeAsync(string code);
     Task<IEnumerable<string>> GetOccupiedSeatsAsync(Guid flightId, DateOnly departureDate);
-=======
 }
 ```
 
@@ -617,7 +615,6 @@ Step 4b: Validate Seat Availability
 ├─ Verify no two passengers share the same seat
 └─ If any seat is taken or duplicated → Throw AppException (409 Conflict)
 
-=======
 Step 5: Calculate Price
 ├─ Get pricing strategy for flight's airline
 │  └─ Example: For "GlobalAir" → GlobalAirPricingStrategy
@@ -1211,7 +1208,6 @@ public class PassengerDetail
     public DocumentType DocumentType { get; set; }   // NationalID, PassportNumber
     public string DocumentNumber { get; set; }       // "12345678"
     public string SeatNumber { get; set; }           // "12A"
-=======
     public int PassengerIndex { get; set; }          // 1, 2, 3, ...
     public DateTime CreatedAt { get; set; }
     
