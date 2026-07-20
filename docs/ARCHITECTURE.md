@@ -148,6 +148,7 @@ PassengerDetails
 ├── Email (string)
 ├── DocumentType (enum: NationalID, PassportNumber)
 ├── DocumentNumber (string)
+├── SeatNumber (NVARCHAR(5), NOT NULL, default '')
 ├── PassengerIndex (int)
 └── CreatedAt (DateTime)
 ```
@@ -304,6 +305,23 @@ Error Response (400):
 }
 ```
 
+#### GET /api/flights/{flightId}/seats?departureDate
+**Authenticated Endpoint (Requires JWT Token)**
+```json
+Response (200):
+{
+  "flightId": "flight-id-guid",
+  "departureDate": "2026-07-15",
+  "cabinClass": "Economy",
+  "availableSeats": ["1A", "1B", "2A", "2B", "3C"]
+}
+
+Error Response (404):
+{
+  "error": "Flight not found"
+}
+```
+
 ### Booking Endpoints
 
 #### POST /api/bookings
@@ -317,13 +335,15 @@ Request (with Authorization: Bearer {token}):
       "fullName": "John Doe",
       "email": "john@example.com",
       "documentType": "NationalID",
-      "documentNumber": "AB123456"
+      "documentNumber": "AB123456",
+      "seatNumber": "12A"
     },
     {
       "fullName": "Jane Doe",
       "email": "jane@example.com",
       "documentType": "NationalID",
-      "documentNumber": "CD789012"
+      "documentNumber": "CD789012",
+      "seatNumber": "12B"
     }
   ]
 }
@@ -349,12 +369,14 @@ Response (201):
     {
       "fullName": "John Doe",
       "email": "john@example.com",
-      "documentType": "NationalID"
+      "documentType": "NationalID",
+      "seatNumber": "12A"
     },
     {
       "fullName": "Jane Doe",
       "email": "jane@example.com",
-      "documentType": "NationalID"
+      "documentType": "NationalID",
+      "seatNumber": "12B"
     }
   ],
   "bookingStatus": "Confirmed",
@@ -375,6 +397,11 @@ Error Response (401):
 Error Response (404):
 {
   "error": "Flight not found"
+}
+
+Error Response (409):
+{
+  "error": "One or more selected seats are no longer available"
 }
 ```
 

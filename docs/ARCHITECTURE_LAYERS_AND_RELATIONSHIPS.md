@@ -127,17 +127,25 @@ SkyRoute.Application/
 │   ├── FlightSearchService.cs
 │   ├── BookingService.cs
 │   ├── AuthService.cs
+│   ├── AirportService.cs
+│   └── SeatService.cs
+=======
 │   └── AirportService.cs
 ├── Interfaces/
 │   ├── IFlightSearchService.cs
 │   ├── IBookingService.cs
 │   ├── IFlightRepository.cs
 │   ├── IFlightPricingStrategy.cs
+│   ├── ISeatService.cs
+=======
 │   └── ... (other interfaces)
 ├── DTOs/
 │   ├── Flight/
 │   │   ├── FlightSearchRequestDto.cs
 │   │   ├── FlightSearchResponseDto.cs
+│   │   ├── FlightResultDto.cs
+│   │   └── SeatAvailabilityDto.cs
+=======
 │   │   └── FlightResultDto.cs
 │   ├── Booking/
 │   ├── Auth/
@@ -148,6 +156,9 @@ SkyRoute.Application/
 │   └── RegisterRequestValidator.cs
 └── Common/
     ├── AppException.cs
+    ├── PricingResult.cs
+    └── SeatConfiguration.cs
+=======
     └── PricingResult.cs
 ```
 
@@ -448,6 +459,8 @@ IAirportRepository
 IBookingRepository
 ├── CreateAsync(booking)
 ├── GetByReferenceAsync(referenceCode, userId)
+├── GetOccupiedSeatsAsync(flightId, departureDate)
+=======
 └── ... (other queries)
 
 IUserRepository
@@ -811,6 +824,8 @@ services.AddScoped<IFlightSearchService, FlightSearchService>();
 services.AddScoped<IBookingService, BookingService>();
 services.AddScoped<IAirportService, AirportService>();
 services.AddScoped<IAuthService, AuthService>();
+services.AddScoped<ISeatService, SeatService>();
+=======
 
 // Register repositories (Infrastructure Layer)
 services.AddScoped<IFlightRepository, FlightRepository>();

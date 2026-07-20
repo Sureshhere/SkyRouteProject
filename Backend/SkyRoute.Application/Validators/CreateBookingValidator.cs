@@ -38,5 +38,9 @@ public class PassengerInputValidator : AbstractValidator<PassengerInputDto>
         RuleFor(x => x.DocumentNumber)
             .NotEmpty().WithMessage("Document number is required.")
             .MaximumLength(50);
+
+        RuleFor(x => x.SeatNumber)
+            .NotEmpty().WithMessage("Seat number is required.")
+            .MaximumLength(5);
     }
 }

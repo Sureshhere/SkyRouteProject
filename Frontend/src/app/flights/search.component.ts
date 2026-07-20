@@ -95,9 +95,9 @@ function pastDateValidator(control: AbstractControl): ValidationErrors | null {
               <div class="form-group" style="margin-bottom: 0;">
                 <label>Cabin Class</label>
                 <select formControlName="cabinClass">
-                  <option [value]="1">Economy</option>
-                  <option [value]="2">Business</option>
-                  <option [value]="3">First Class</option>
+                  <option [ngValue]="1">Economy</option>
+                  <option [ngValue]="2">Business</option>
+                  <option [ngValue]="3">First Class</option>
                 </select>
               </div>
 

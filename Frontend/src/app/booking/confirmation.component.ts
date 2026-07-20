@@ -57,6 +57,13 @@ import { BookingConfirmation } from '../models';
             <span class="price-total-amount">{{ formatPrice(confirmation()!.pricing.totalPrice) }}</span>
           </div>
 
+          <div *ngIf="confirmation()!.passengers && confirmation()!.passengers!.length > 0" style="margin-top: 20px;">
+            <div style="font-weight: 600; margin-bottom: 8px;">Passengers</div>
+            <div *ngFor="let p of confirmation()!.passengers; let i = index" style="padding: 6px 0; border-bottom: 1px solid #eee;">
+              Passenger {{ i + 1 }} — {{ p.fullName }} · Seat: {{ p.seatNumber || '—' }}
+            </div>
+          </div>
+
           <div style="text-align: center; margin: 20px 0;">
             <span class="status-badge">\u2713 {{ confirmation()!.bookingStatus }}</span>
           </div>
