@@ -1,5 +1,3 @@
-import { Component, signal, computed, OnInit } from '@angular/core';
-=======
 ﻿import { Component, signal, computed, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormBuilder, FormGroup, Validators, FormArray } from '@angular/forms';
@@ -109,7 +107,7 @@ const AIRPORT_COUNTRY: Record<string, string> = {
                 </select>
                 <div class="error" *ngIf="passenger.get('seatNumber')?.hasError('required') && passenger.get('seatNumber')?.touched">
                   Please select a seat
-=======
+                </div>
                 </div>
               </div>
             </div>
@@ -138,14 +136,6 @@ export class BookingComponent implements OnInit {
   seatsLoading = signal(false);
   seatsError = signal<string | null>(null);
   seatsLoaded = signal(false);
-
-  isDomestic = computed(() => {
-    const f = this.flight();
-    if (!f) return false;
-    const originCountry = AIRPORT_COUNTRY[f.originCode.toUpperCase()];
-    const destCountry = AIRPORT_COUNTRY[f.destinationCode.toUpperCase()];
-    return !!originCountry && !!destCountry && originCountry === destCountry;
-  });
 
   isDomestic = computed(() => {
     const f = this.flight();
@@ -222,8 +212,6 @@ export class BookingComponent implements OnInit {
       email: ['', [Validators.required, Validators.email]],
       documentNumber: ['', [Validators.required, Validators.pattern(pattern)]],
       seatNumber: ['', Validators.required]
-=======
-      documentNumber: ['', [Validators.required, Validators.pattern(pattern)]]
     });
   }
 

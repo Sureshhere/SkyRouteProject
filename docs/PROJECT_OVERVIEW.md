@@ -164,8 +164,6 @@ userEmail = computed(() => this.isAuthenticated() ? localStorage.getItem('email'
 |---------|---------------|
 | `AuthService` | Register, login, logout; auth state via signals |
 | `FlightService` | Search flights, fetch airports, `getAvailableSeats`, client-side sort, format helpers |
-=======
-| `FlightService` | Search flights, fetch airports, client-side sort, format helpers |
 | `BookingService` | Create/fetch/cancel booking, document validation, domestic check |
 
 ### Form Validation
@@ -208,7 +206,6 @@ Dependencies always flow **inward**. The Domain layer has zero dependencies on a
 | `GET` | `/api/airports` | None | Returns all airports |
 | `POST` | `/api/flights/search` | None | Search flights (FluentValidation) |
 | `GET` | `/api/flights/{flightId}/seats` | Bearer | Returns available seats for a flight on a date |
-=======
 | `POST` | `/api/bookings` | Bearer | Create a booking |
 | `GET` | `/api/bookings/{referenceCode}` | Bearer | Fetch booking by reference |
 | `POST` | `/api/auth/register` | None | Register new user |
@@ -224,7 +221,6 @@ Business logic lives entirely in services:
 - `FlightSearchService` — airport lookup, flight query, pricing strategy resolution
 - `BookingService` — flight validation, domestic/international detection, document validation, booking creation with reference code (`SK{yyyyMMdd}{6-hex}`)
 - `SeatService` — queries occupied seats per flight/date, computes available seats from flight capacity
-=======
 
 ### Pricing — Strategy Pattern
 
@@ -325,7 +321,6 @@ PassengerDetails
 ├── DocumentType (NationalId | PassportNumber)
 ├── DocumentNumber
 ├── SeatNumber (NVARCHAR(5))
-=======
 ├── PassengerIndex
 └── CreatedAt
 ```
