@@ -108,7 +108,6 @@ const AIRPORT_COUNTRY: Record<string, string> = {
                 <div class="error" *ngIf="passenger.get('seatNumber')?.hasError('required') && passenger.get('seatNumber')?.touched">
                   Please select a seat
                 </div>
-                </div>
               </div>
             </div>
           </div>
