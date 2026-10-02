@@ -48,7 +48,7 @@ Domain has zero external dependencies. Business logic lives in services. Control
 Project key: `SKR` | Site: `sureshchoudhary.atlassian.net`  
 Use Atlassian MCP tools to fetch tickets, transition statuses, and add comments.
 
-## Agents — `.claude/agents/`
+## Agents — `.github/agents/`
 
 | Agent | Use for |
 |-------|---------|
