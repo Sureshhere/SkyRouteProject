@@ -48,7 +48,7 @@ Domain has zero external dependencies. Business logic lives in services. Control
 Project key: `SKR` | Site: `sureshchoudhary.atlassian.net`  
 Use Atlassian MCP tools to fetch tickets, transition statuses, and add comments.
 
-## Agents — `.claude/agents/`
+## Agents — `.github/agents/`
 
 | Agent | Use for |
 |-------|---------|
@@ -58,12 +58,3 @@ Use Atlassian MCP tools to fetch tickets, transition statuses, and add comments.
 | `tester` | xUnit backend tests and Karma/Jasmine frontend tests |
 | `reviewer` | Code review as Principal Engineer — requirements, architecture, security |
 | `doc-sync` | Keep `/docs` in sync after any code change |
-
-## Slash Commands — `.claude/commands/`
-
-| Command | Purpose |
-|---------|---------|
-| `/implement <SKR-XX>` | Fetch Jira ticket and implement it end-to-end |
-| `/architect <SKR-XX or description>` | Design a feature before implementing |
-| `/review <SKR-XX>` | Review current changes against Jira AC and architecture |
-| `/sync-docs` | Sync `/docs` after implementation |

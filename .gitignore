@@ -32,6 +32,13 @@ node_modules/
 dist/
 .angular/
 *.js.map
+coverage/
+
+## Python / tooling
+.venv/
+__pycache__/
+*.pyc
+graphify-out/
 
 ## OS
 .DS_Store
