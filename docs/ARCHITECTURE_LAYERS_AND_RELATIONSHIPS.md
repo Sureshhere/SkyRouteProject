@@ -135,7 +135,6 @@ SkyRoute.Application/
 │   ├── IFlightRepository.cs
 │   ├── IFlightPricingStrategy.cs
 │   ├── ISeatService.cs
-│   └── ... (other interfaces)
 ├── DTOs/
 │   ├── Flight/
 │   │   ├── FlightSearchRequestDto.cs
@@ -453,7 +452,6 @@ IBookingRepository
 ├── CreateAsync(booking)
 ├── GetByReferenceAsync(referenceCode, userId)
 ├── GetOccupiedSeatsAsync(flightId, departureDate)
-└── ... (other queries)
 
 IUserRepository
 ├── GetByEmailAsync(email)

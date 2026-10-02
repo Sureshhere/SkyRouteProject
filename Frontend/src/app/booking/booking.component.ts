@@ -1,4 +1,4 @@
-import { Component, signal, computed, OnInit } from '@angular/core';
+﻿import { Component, signal, computed, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormBuilder, FormGroup, Validators, FormArray } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -107,6 +107,7 @@ const AIRPORT_COUNTRY: Record<string, string> = {
                 </select>
                 <div class="error" *ngIf="passenger.get('seatNumber')?.hasError('required') && passenger.get('seatNumber')?.touched">
                   Please select a seat
+                </div>
                 </div>
               </div>
             </div>
