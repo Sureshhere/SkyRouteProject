@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import { Airport, FlightResult, FlightSearchRequest } from '../models';
+import { Airport, FlightResult, FlightSearchRequest, SeatAvailability } from '../models';
 
 @Injectable({
   providedIn: 'root'
@@ -40,6 +40,13 @@ export class FlightService {
 
   formatPrice(price: number): string {
     return `USD ${price.toFixed(2)}`;
+  }
+
+  getAvailableSeats(flightId: string, departureDate: string): Observable<SeatAvailability> {
+    return this.http.get<SeatAvailability>(
+      `${this.apiUrl}/flights/${flightId}/seats?departureDate=${departureDate}`,
+      { withCredentials: true }
+    );
   }
 
   formatTime(dateString: string): string {

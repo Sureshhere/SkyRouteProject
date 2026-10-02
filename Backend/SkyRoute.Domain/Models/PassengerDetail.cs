@@ -11,6 +11,7 @@ public class PassengerDetail
     public DocumentType DocumentType { get; set; }
     public string DocumentNumber { get; set; } = string.Empty;
     public int PassengerIndex { get; set; }
+    public string SeatNumber { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; }
 
     public Booking Booking { get; set; } = null!;

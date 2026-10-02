@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using SkyRoute.Infrastructure.Data;
 
@@ -11,9 +12,11 @@ using SkyRoute.Infrastructure.Data;
 namespace SkyRoute.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(SkyRouteDbContext))]
-    partial class SkyRouteDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260720171325_AddPassengerSeatNumber")]
+    partial class AddPassengerSeatNumber
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -2327,9 +2330,10 @@ namespace SkyRoute.Infrastructure.Data.Migrations
 
                     b.Property<string>("SeatNumber")
                         .IsRequired()
+                        .ValueGeneratedOnAdd()
                         .HasMaxLength(5)
-                        .HasDefaultValue("")
-                        .HasColumnType("nvarchar(5)");
+                        .HasColumnType("nvarchar(5)")
+                        .HasDefaultValue("");
 
                     b.HasKey("Id");
 

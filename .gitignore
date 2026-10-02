@@ -32,6 +32,16 @@ node_modules/
 dist/
 .angular/
 *.js.map
+coverage/
+
+## Python / tooling
+.venv/
+__pycache__/
+*.pyc
+graphify-out/
+
+## Analytics (local/private tool exports)
+docs/codemie/
 
 ## OS
 .DS_Store
