@@ -40,6 +40,9 @@ __pycache__/
 *.pyc
 graphify-out/
 
+## Analytics (local/private tool exports)
+docs/codemie/
+
 ## OS
 .DS_Store
 Thumbs.db
