@@ -2,28 +2,42 @@ name: Copilot Code Review
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, reopened, ready_for_review, synchronize]
 
 permissions:
   pull-requests: write
   contents: read
 
 jobs:
-  copilot-review:
-    name: Copilot Review
+  request-copilot-review:
     runs-on: ubuntu-latest
     steps:
-      - name: Copilot Review Instructions
-        run: |
-          echo "==========================================="
-          echo "  Copilot PR Code Review"
-          echo "==========================================="
-          echo ""
-          echo "  To trigger Copilot review on this PR:"
-          echo "  1. Open the PR on GitHub"
-          echo "  2. Click ⚙️ gear next to 'Reviewers'"
-          echo "  3. Search for 'Copilot' and select it"
-          echo ""
-          echo "  Automated Copilot reviews require"
-          echo "  GitHub Copilot Enterprise plan."
-          echo "==========================================="
+      - name: Request Copilot as reviewer
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const pull_number = context.payload.pull_request.number;
+
+            // Some orgs use different slugs; try both.
+            const candidates = ['copilot', 'github-copilot'];
+
+            let lastError = null;
+            for (const reviewer of candidates) {
+              try {
+                await github.rest.pulls.requestReviewers({
+                  owner,
+                  repo,
+                  pull_number,
+                  reviewers: [reviewer],
+                });
+                core.info(`Requested reviewer: ${reviewer}`);
+                return;
+              } catch (e) {
+                lastError = e;
+                core.warning(`Failed requesting ${reviewer}: ${e.message}`);
+              }
+            }
+
+            throw new Error(`Could not request Copilot reviewer. Last error: ${lastError?.message ?? 'unknown'}`);
