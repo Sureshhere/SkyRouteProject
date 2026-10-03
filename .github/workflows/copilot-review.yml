@@ -1,4 +1,4 @@
-name: AI PR Review (NVIDIA)
+name: AI PR Review (Google Gemini)
 
 on:
   pull_request:
@@ -19,12 +19,11 @@ jobs:
     timeout-minutes: 10
 
     steps:
-      - name: Generate AI review comment (NVIDIA)
+      - name: Generate AI review comment (Google Gemini)
         uses: actions/github-script@v7
         env:
-          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
-          NVIDIA_BASE_URL: ${{ vars.NVIDIA_BASE_URL }}
-          NVIDIA_MODEL: ${{ vars.NVIDIA_MODEL }}
+          GOOGLE_AI_API_KEY: ${{ secrets.GOOGLE_AI_API_KEY }}
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
           MAX_DIFF_CHARS: ${{ vars.AI_REVIEW_MAX_DIFF_CHARS }}
           AI_REVIEW_INCLUDE_EXTENSIONS: ${{ vars.AI_REVIEW_INCLUDE_EXTENSIONS }}
           AI_REVIEW_EXCLUDE_PATHS: ${{ vars.AI_REVIEW_EXCLUDE_PATHS }}
@@ -40,9 +39,8 @@ jobs:
               return;
             }
 
-            const apiKey = (process.env.NVIDIA_API_KEY || '').trim();
-            const baseUrl = (process.env.NVIDIA_BASE_URL || 'https://integrate.api.nvidia.com/v1').replace(/\/+$/, '');
-            const model = (process.env.NVIDIA_MODEL || 'openai/gpt-oss-20b').trim();
+            const apiKey = (process.env.GOOGLE_AI_API_KEY || '').trim();
+            const model = (process.env.GEMINI_MODEL || 'gemini-1.5-flash').trim();
             const maxChars = parseInt((process.env.MAX_DIFF_CHARS || '120000').trim(), 10);
 
             // Best defaults:
@@ -54,7 +52,7 @@ jobs:
 
             // Helper: post/update a single sticky comment
             async function postOrUpdateComment(body) {
-              const marker = '<!-- ai-pr-review:nvidia -->';
+              const marker = '<!-- ai-pr-review:gemini -->';
               const fullBody = body.includes(marker) ? body : [marker, body].join('\n');
 
               const comments = await github.paginate(github.rest.issues.listComments, {
@@ -71,8 +69,6 @@ jobs:
               }
             }
 
-            // Diagnostic ping so you always see *some* comment when it runs
-            // (helps when people think it didn't post because it updates the same comment)
             const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
 
             if (!apiKey) {
@@ -85,10 +81,10 @@ jobs:
                 '',
                 '### Details',
                 '```',
-                'Missing secret NVIDIA_API_KEY. Add it in GitHub repo Settings → Secrets and variables → Actions.',
+                'Missing secret GOOGLE_AI_API_KEY. Add it in GitHub repo Settings → Secrets and variables → Actions.',
                 '```',
               ].join('\n'));
-              core.warning('Missing secret NVIDIA_API_KEY');
+              core.warning('Missing secret GOOGLE_AI_API_KEY');
               return;
             }
 
@@ -164,7 +160,7 @@ jobs:
               return;
             }
 
-            // ----- 3) Call NVIDIA (OpenAI-compatible)
+            // ----- 3) Call Google Gemini API
             const systemPrompt = [
               'You are a senior software engineer doing a pull request review.',
               'Review ONLY the provided diff hunks. You do NOT have access to the full repository.',
@@ -198,26 +194,28 @@ jobs:
               '- test suggestion',
             ].join('\n');
 
-            const url = `${baseUrl}/chat/completions`;
+            // Google Gemini API endpoint
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
             const res = await fetch(url, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                'Accept': 'application/json',
-                'Authorization': `Bearer ${apiKey}`,
               },
               body: JSON.stringify({
-                model,
-                temperature: 0.2,
-                top_p: 1,
-                max_tokens: 900,
-                stream: false,
-                reasoning_effort: 'low',
-                messages: [
-                  { role: 'system', content: systemPrompt },
-                  { role: 'user', content: userPrompt },
+                contents: [
+                  {
+                    role: 'user',
+                    parts: [
+                      { text: systemPrompt + '\n\n' + userPrompt }
+                    ]
+                  }
                 ],
+                generationConfig: {
+                  temperature: 0.2,
+                  topP: 1,
+                  maxOutputTokens: 900,
+                }
               }),
             });
 
@@ -235,24 +233,18 @@ jobs:
                 '',
                 '### Details',
                 '```',
-                `NVIDIA API request failed: ${res.status} ${res.statusText}`,
+                `Google Gemini API request failed: ${res.status} ${res.statusText}`,
                 `URL: ${url}`,
                 text,
                 '```',
               ].join('\n'));
-              core.warning('NVIDIA API request failed');
+              core.warning('Google Gemini API request failed');
               return;
             }
 
-            // Provider may put text in content or reasoning. Prefer content, but fall back.
-            const msg = data?.choices?.[0]?.message;
-            let review = (
-              msg?.content ??
-              msg?.reasoning_content ??
-              msg?.reasoning ??
-              data?.choices?.[0]?.text ??
-              ''
-            ).toString().trim();
+            // Extract text from Gemini response
+            const candidate = data?.candidates?.[0];
+            const review = candidate?.content?.parts?.[0]?.text?.trim() || '';
 
             if (!review) {
               const snippet = text.length > 2000 ? text.slice(0, 2000) + '\n...<truncated>...' : text;
@@ -272,11 +264,6 @@ jobs:
               return;
             }
 
-            // Cleanup: remove common "thinking" preambles if present
-            review = review
-              .replace(/^\s*(We need to review\s+PR\.?\s*)/i, '')
-              .trim();
-
             const commentBody = [
               '## AI Code Review',
               '',
@@ -284,7 +271,7 @@ jobs:
               '',
               '---',
               `Workflow run: ${runUrl}`,
-              `Provider: NVIDIA`,
+              `Provider: Google Gemini`,
               `Model: \`${model}\``
             ].join('\n');
 
