@@ -1,3 +1,4 @@
+using BCrypt.Net;
 using Microsoft.EntityFrameworkCore;
 using SkyRoute.Domain.Enums;
 using SkyRoute.Domain.Models;
@@ -92,6 +93,34 @@ public class SkyRouteDbContext : DbContext
 
     private static void SeedData(ModelBuilder modelBuilder)
     {
+        // ── Users (test accounts) ─────────────────────────────────────────────
+        var userId1 = Guid.Parse("99999999-9999-9999-9999-999999999999");
+        var userId2 = Guid.Parse("88888888-8888-8888-8888-888888888888");
+
+        // Password: password123 (BCrypt hash with workFactor 12)
+        var hashedPassword = BCrypt.Net.BCrypt.HashPassword("password123", workFactor: 12);
+
+        modelBuilder.Entity<User>().HasData(
+            new User
+            {
+                Id = userId1,
+                Email = "john@example.com",
+                FullName = "John Doe",
+                PasswordHash = hashedPassword,
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow
+            },
+            new User
+            {
+                Id = userId2,
+                Email = "jane@example.com",
+                FullName = "Jane Smith",
+                PasswordHash = hashedPassword,
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow
+            }
+        );
+
         // ── Airlines ──────────────────────────────────────────────────────────
         var globalAirId  = Guid.Parse("11111111-1111-1111-1111-111111111111");
         var budgetWingsId = Guid.Parse("22222222-2222-2222-2222-222222222222");
