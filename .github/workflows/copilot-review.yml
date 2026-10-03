@@ -1,10 +1,9 @@
-name: AI PR Review (NVIDIA Nemotron)
+name: AI PR Review (NVIDIA)
 
 on:
   pull_request:
     types: [opened, reopened, ready_for_review, synchronize]
 
-# Needed to read diffs and post a PR comment
 permissions:
   contents: read
   pull-requests: write
@@ -34,10 +33,17 @@ jobs:
             const repo = context.repo.repo;
             const pull_number = context.payload.pull_request.number;
 
-            // Defaults (GitHub expressions like ${{ vars.X || 'default' }} are NOT supported)
             const apiKey = (process.env.NVIDIA_API_KEY || '').trim();
             const baseUrl = (process.env.NVIDIA_BASE_URL || 'https://integrate.api.nvidia.com/v1').replace(/\/+$/, '');
-            const model = (process.env.NVIDIA_MODEL || 'nvidia/nemotron-3-super-120b-a12b').trim();
+
+            // Default to an NVIDIA-hosted OpenAI OSS model (works via the same endpoint)
+            const primaryModel = (process.env.NVIDIA_MODEL || 'openai/gpt-oss-20b').trim();
+            const fallbackModels = [
+              'openai/gpt-oss-20b',
+              'nvidia/nemotron-4-mini-instruct',
+              'nvidia/nemotron-4-340b-instruct',
+            ];
+
             const maxChars = parseInt((process.env.MAX_DIFF_CHARS || '120000').trim(), 10);
 
             if (!apiKey) {
@@ -125,35 +131,67 @@ jobs:
               diffText || '(no diff found)'
             ].join('\n');
 
-            const res = await fetch(`${baseUrl}/chat/completions`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${apiKey}`,
-              },
-              body: JSON.stringify({
-                model,
-                temperature: 0.2,
-                top_p: 1,
-                max_tokens: 900,
-                stream: false,
-                messages: [
-                  { role: 'system', content: systemPrompt },
-                  { role: 'user', content: userPrompt },
-                ],
-              }),
-            });
+            async function callModel(model) {
+              const res = await fetch(`${baseUrl}/chat/completions`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${apiKey}`,
+                },
+                body: JSON.stringify({
+                  model,
+                  temperature: 0.2,
+                  top_p: 1,
+                  max_tokens: 900,
+                  stream: false,
+                  messages: [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: userPrompt },
+                  ],
+                }),
+              });
 
-            if (!res.ok) {
-              const errText = await res.text();
-              core.setFailed(`NVIDIA API request failed: ${res.status} ${res.statusText}\n${errText}`);
-              return;
+              const text = await res.text();
+              let data;
+              try { data = JSON.parse(text); } catch { data = null; }
+
+              return { ok: res.ok, status: res.status, statusText: res.statusText, text, data };
             }
 
-            const data = await res.json();
-            const review = data?.choices?.[0]?.message?.content?.trim();
+            const modelsToTry = [primaryModel, ...fallbackModels].filter((v, i, a) => v && a.indexOf(v) === i);
+
+            let chosenModel = null;
+            let review = null;
+            let lastErr = null;
+
+            for (const m of modelsToTry) {
+              core.info(`Trying NVIDIA model: ${m}`);
+              const r = await callModel(m);
+
+              if (r.ok) {
+                const content = r.data?.choices?.[0]?.message?.content?.trim();
+                if (content) {
+                  chosenModel = m;
+                  review = content;
+                  break;
+                }
+                lastErr = `Model ${m} returned empty content.`;
+                continue;
+              }
+
+              // If EOL / gone, try next model
+              if (r.status === 410) {
+                core.warning(`Model ${m} unavailable (410). Trying next.`);
+                lastErr = `Model ${m} unavailable (410).`;
+                continue;
+              }
+
+              lastErr = `NVIDIA API request failed for model ${m}: ${r.status} ${r.statusText}\n${r.text}`;
+              break;
+            }
+
             if (!review) {
-              core.setFailed('NVIDIA returned empty review content.');
+              core.setFailed(lastErr || 'NVIDIA review failed for all models.');
               return;
             }
 
@@ -167,7 +205,7 @@ jobs:
               '',
               '---',
               `Provider: NVIDIA`,
-              `Model: \`${model}\``
+              `Model: \`${chosenModel}\``
             ].join('\n');
 
             const comments = await github.paginate(github.rest.issues.listComments, {
