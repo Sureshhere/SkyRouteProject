@@ -36,12 +36,11 @@ jobs:
             const apiKey = (process.env.NVIDIA_API_KEY || '').trim();
             const baseUrl = (process.env.NVIDIA_BASE_URL || 'https://integrate.api.nvidia.com/v1').replace(/\/+$/, '');
 
-            // Default to an NVIDIA-hosted OpenAI OSS model (works via the same endpoint)
+            // Prefer the NVIDIA-hosted OpenAI OSS model (set via repo variable NVIDIA_MODEL if desired)
             const primaryModel = (process.env.NVIDIA_MODEL || 'openai/gpt-oss-20b').trim();
             const fallbackModels = [
+              // Keep fallbacks minimal; model availability varies by account
               'openai/gpt-oss-20b',
-              'nvidia/nemotron-4-mini-instruct',
-              'nvidia/nemotron-4-340b-instruct',
             ];
 
             const maxChars = parseInt((process.env.MAX_DIFF_CHARS || '120000').trim(), 10);
@@ -132,10 +131,12 @@ jobs:
             ].join('\n');
 
             async function callModel(model) {
-              const res = await fetch(`${baseUrl}/chat/completions`, {
+              const url = `${baseUrl}/chat/completions`;
+              const res = await fetch(url, {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json',
+                  'Accept': 'application/json',
                   'Authorization': `Bearer ${apiKey}`,
                 },
                 body: JSON.stringify({
@@ -155,7 +156,7 @@ jobs:
               let data;
               try { data = JSON.parse(text); } catch { data = null; }
 
-              return { ok: res.ok, status: res.status, statusText: res.statusText, text, data };
+              return { ok: res.ok, status: res.status, statusText: res.statusText, text, data, url };
             }
 
             const modelsToTry = [primaryModel, ...fallbackModels].filter((v, i, a) => v && a.indexOf(v) === i);
@@ -186,11 +187,45 @@ jobs:
                 continue;
               }
 
-              lastErr = `NVIDIA API request failed for model ${m}: ${r.status} ${r.statusText}\n${r.text}`;
+              // For 404/401/403 etc, fail fast with more context
+              lastErr = `NVIDIA API request failed for model ${m}: ${r.status} ${r.statusText}\nURL: ${r.url}\n${r.text}`;
               break;
             }
 
             if (!review) {
+              // Post a helpful comment to the PR so it's visible without opening logs
+              const marker = '<!-- ai-pr-review:nvidia -->';
+              const failBody = [
+                marker,
+                '## AI Code Review',
+                '',
+                `❌ Failed to generate AI review.` ,
+                '',
+                '### Details',
+                '```',
+                (lastErr || 'Unknown error'),
+                '```',
+                '',
+                '### How to fix',
+                '- Ensure `NVIDIA_API_KEY` secret is present.',
+                '- Set repository variable `NVIDIA_MODEL` to a model you have access to (see https://build.nvidia.com/).',
+                '- Keep `NVIDIA_BASE_URL` empty unless you changed it; default is `https://integrate.api.nvidia.com/v1`.',
+              ].join('\n');
+
+              // Try to create/update comment even on failure
+              const comments = await github.paginate(github.rest.issues.listComments, {
+                owner,
+                repo,
+                issue_number: pull_number,
+                per_page: 100,
+              });
+              const existing = comments.find(c => (c.body || '').includes(marker));
+              if (existing) {
+                await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body: failBody });
+              } else {
+                await github.rest.issues.createComment({ owner, repo, issue_number: pull_number, body: failBody });
+              }
+
               core.setFailed(lastErr || 'NVIDIA review failed for all models.');
               return;
             }
