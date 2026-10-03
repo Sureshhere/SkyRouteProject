@@ -38,15 +38,45 @@ jobs:
             const model = (process.env.NVIDIA_MODEL || 'openai/gpt-oss-20b').trim();
             const maxChars = parseInt((process.env.MAX_DIFF_CHARS || '120000').trim(), 10);
 
-            // Defaults: non-blocking workflow + focus on code files.
-            // Configure via repo variables if you want different behavior.
+            // Best defaults:
+            // - Non-blocking: never fails the job (won't block merges)
+            // - Reviews only text diffs (patch hunks)
+            // - Focuses on typical code/doc files and ignores noisy paths
             const defaultExcludePaths = ['.github/', 'dist/', 'build/', 'node_modules/'];
             const defaultIncludeExtensions = ['.cs', '.ts', '.tsx', '.js', '.jsx', '.py', '.java', '.kt', '.go', '.rs', '.cpp', '.h', '.hpp', '.c', '.yaml', '.yml', '.json', '.md'];
 
+            // Helper: post/update a single sticky comment
+            async function postOrUpdateComment(body) {
+              const marker = '<!-- ai-pr-review:nvidia -->';
+              const fullBody = body.includes(marker) ? body : [marker, body].join('\n');
+
+              const comments = await github.paginate(github.rest.issues.listComments, {
+                owner,
+                repo,
+                issue_number: pull_number,
+                per_page: 100,
+              });
+              const existing = comments.find(c => (c.body || '').includes(marker));
+              if (existing) {
+                await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body: fullBody });
+              } else {
+                await github.rest.issues.createComment({ owner, repo, issue_number: pull_number, body: fullBody });
+              }
+            }
+
             if (!apiKey) {
-              await postOrUpdateComment('Missing secret NVIDIA_API_KEY. Add it in GitHub repo Settings → Secrets and variables → Actions.');
+              await postOrUpdateComment([
+                '## AI Code Review',
+                '',
+                '⚠️ AI review could not be generated (non-blocking).',
+                '',
+                '### Details',
+                '```',
+                'Missing secret NVIDIA_API_KEY. Add it in GitHub repo Settings → Secrets and variables → Actions.',
+                '```',
+              ].join('\n'));
               core.warning('Missing secret NVIDIA_API_KEY');
-              return; // non-blocking
+              return;
             }
 
             // ----- 1) Gather PR metadata
@@ -109,27 +139,28 @@ jobs:
             }
 
             if (!diffText.trim()) {
-              await postOrUpdateComment('No textual diff hunks found to review (all files may be binary or excluded).');
-              return; // non-blocking
+              await postOrUpdateComment([
+                '## AI Code Review',
+                '',
+                '⚠️ Nothing to review (non-blocking).',
+                '',
+                'No textual diff hunks were found (all files may be binary/too large/excluded).',
+              ].join('\n'));
+              return;
             }
 
             // ----- 3) Call NVIDIA (OpenAI-compatible)
-            // This model often returns `message.reasoning` with `message.content=null`.
-            // We extract a clean "final" review by instructing the model to output only markdown.
+            // IMPORTANT: We require two sections:
+            // - Findings (diff-grounded): MUST cite file names from the diff and MUST NOT speculate.
+            // - Risks to validate: allowed to suggest checks, but must be phrased as validation questions.
             const systemPrompt = [
               'You are a senior software engineer doing a pull request review.',
-              'Write a concise, actionable review of the changes.',
-              'Focus on: correctness, security, performance, tests, maintainability.',
-              'Output ONLY markdown (no preamble, no meta commentary, no chain-of-thought).',
-              'Use this structure exactly:',
-              '## Summary',
-              '- ...',
-              '## Must fix (blocking)',
-              '- ... (or "- None")',
-              '## Suggestions (non-blocking)',
-              '- ... (or "- None")',
-              '## Tests',
-              '- ... (or "- None")'
+              'Review ONLY the provided diff hunks. You do NOT have access to the full repository.',
+              'Never claim something is missing or broken unless it is directly visible in the diff.',
+              'When you are unsure, write it as a question under "Risks to validate".',
+              'Every bullet under "Findings (from diff)" MUST start with a file path from the diff, e.g. "path/to/file.cs: ...".',
+              'Keep the review concise (max ~12 bullets total across all sections).',
+              'Output ONLY markdown. No preamble, no meta commentary, no chain-of-thought.'
             ].join(' ');
 
             const userPrompt = [
@@ -140,8 +171,19 @@ jobs:
               'PR description:',
               prBody || '(empty)',
               '',
-              'Diff:',
-              diffText
+              'Diff hunks:',
+              diffText,
+              '',
+              'Return markdown with this exact structure:',
+              '## Summary',
+              '## Findings (from diff)',
+              '- file: finding',
+              '## Risks to validate (needs repo context)',
+              '- question/check',
+              '## Suggestions',
+              '- suggestion',
+              '## Tests',
+              '- test suggestion',
             ].join('\n');
 
             const url = `${baseUrl}/chat/completions`;
@@ -159,7 +201,6 @@ jobs:
                 top_p: 1,
                 max_tokens: 900,
                 stream: false,
-                // Some NVIDIA models may support it; safe if ignored.
                 reasoning_effort: 'low',
                 messages: [
                   { role: 'system', content: systemPrompt },
@@ -173,11 +214,23 @@ jobs:
             try { data = JSON.parse(text); } catch { data = null; }
 
             if (!res.ok) {
-              await postOrUpdateComment(`NVIDIA API request failed: ${res.status} ${res.statusText}\nURL: ${url}\n${text}`);
+              await postOrUpdateComment([
+                '## AI Code Review',
+                '',
+                '⚠️ AI review could not be generated (non-blocking).',
+                '',
+                '### Details',
+                '```',
+                `NVIDIA API request failed: ${res.status} ${res.statusText}`,
+                `URL: ${url}`,
+                text,
+                '```',
+              ].join('\n'));
               core.warning('NVIDIA API request failed');
-              return; // non-blocking
+              return;
             }
 
+            // Provider may put text in content or reasoning. Prefer content, but fall back.
             const msg = data?.choices?.[0]?.message;
             let review = (
               msg?.content ??
@@ -189,8 +242,18 @@ jobs:
 
             if (!review) {
               const snippet = text.length > 2000 ? text.slice(0, 2000) + '\n...<truncated>...' : text;
-              await postOrUpdateComment(`Model ${model} returned empty content. Raw response snippet:\n${snippet}`);
-              return; // non-blocking
+              await postOrUpdateComment([
+                '## AI Code Review',
+                '',
+                '⚠️ AI review could not be generated (non-blocking).',
+                '',
+                '### Details',
+                '```',
+                `Model ${model} returned empty content. Raw response snippet:`,
+                snippet,
+                '```',
+              ].join('\n'));
+              return;
             }
 
             // Cleanup: remove common "thinking" preambles if present
@@ -198,9 +261,7 @@ jobs:
               .replace(/^\s*(We need to review\s+PR\.?\s*)/i, '')
               .trim();
 
-            const marker = '<!-- ai-pr-review:nvidia -->';
             const commentBody = [
-              marker,
               '## AI Code Review',
               '',
               review,
@@ -210,37 +271,4 @@ jobs:
               `Model: \`${model}\``
             ].join('\n');
 
-            await postOrUpdateComment(null, commentBody);
-
-            async function postOrUpdateComment(errorText, successBody) {
-              const marker = '<!-- ai-pr-review:nvidia -->';
-              const body = successBody || [
-                marker,
-                '## AI Code Review',
-                '',
-                '⚠️ AI review could not be generated (non-blocking).',
-                '',
-                '### Details',
-                '```',
-                errorText || 'Unknown error',
-                '```',
-                '',
-                '### How to fix',
-                '- Ensure `NVIDIA_API_KEY` secret is present.',
-                '- Set repository variable `NVIDIA_MODEL` to a model you have access to (see https://build.nvidia.com/).',
-                '- Keep `NVIDIA_BASE_URL` empty unless you changed it; default is `https://integrate.api.nvidia.com/v1`.',
-              ].join('\n');
-
-              const comments = await github.paginate(github.rest.issues.listComments, {
-                owner,
-                repo,
-                issue_number: pull_number,
-                per_page: 100,
-              });
-              const existing = comments.find(c => (c.body || '').includes(marker));
-              if (existing) {
-                await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
-              } else {
-                await github.rest.issues.createComment({ owner, repo, issue_number: pull_number, body });
-              }
-            }
+            await postOrUpdateComment(commentBody);
