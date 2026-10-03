@@ -34,4 +34,5 @@ public class PassengerSummaryDto
     public string FullName { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
     public string DocumentType { get; set; } = string.Empty;
+    public string SeatNumber { get; set; } = string.Empty;
 }

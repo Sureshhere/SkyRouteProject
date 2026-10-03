@@ -29,4 +29,8 @@ public class PassengerInputDto
     [Required]
     [StringLength(50)]
     public string DocumentNumber { get; set; } = string.Empty;
+
+    [Required]
+    [StringLength(5)]
+    public string SeatNumber { get; set; } = string.Empty;
 }
