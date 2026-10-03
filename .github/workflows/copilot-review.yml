@@ -35,14 +35,7 @@ jobs:
 
             const apiKey = (process.env.NVIDIA_API_KEY || '').trim();
             const baseUrl = (process.env.NVIDIA_BASE_URL || 'https://integrate.api.nvidia.com/v1').replace(/\/+$/, '');
-
-            // Prefer the NVIDIA-hosted OpenAI OSS model (set via repo variable NVIDIA_MODEL if desired)
-            const primaryModel = (process.env.NVIDIA_MODEL || 'openai/gpt-oss-20b').trim();
-            const fallbackModels = [
-              // Keep fallbacks minimal; model availability varies by account
-              'openai/gpt-oss-20b',
-            ];
-
+            const model = (process.env.NVIDIA_MODEL || 'openai/gpt-oss-20b').trim();
             const maxChars = parseInt((process.env.MAX_DIFF_CHARS || '120000').trim(), 10);
 
             if (!apiKey) {
@@ -115,7 +108,8 @@ jobs:
               'You are a senior software engineer doing a pull request review.',
               'Give actionable feedback, be concise, and focus on correctness, security, performance, tests, and maintainability.',
               'If everything looks good, say so briefly.',
-              'Output markdown with headings and bullet points.'
+              'Output markdown with headings and bullet points.',
+              'Return the review as normal text in message.content.'
             ].join(' ');
 
             const userPrompt = [
@@ -130,103 +124,58 @@ jobs:
               diffText || '(no diff found)'
             ].join('\n');
 
-            async function callModel(model) {
-              const url = `${baseUrl}/chat/completions`;
-              const res = await fetch(url, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Accept': 'application/json',
-                  'Authorization': `Bearer ${apiKey}`,
-                },
-                body: JSON.stringify({
-                  model,
-                  temperature: 0.2,
-                  top_p: 1,
-                  max_tokens: 900,
-                  stream: false,
-                  messages: [
-                    { role: 'system', content: systemPrompt },
-                    { role: 'user', content: userPrompt },
-                  ],
-                }),
-              });
+            const url = `${baseUrl}/chat/completions`;
+            core.info(`Calling NVIDIA endpoint: ${url}`);
 
-              const text = await res.text();
-              let data;
-              try { data = JSON.parse(text); } catch { data = null; }
+            const res = await fetch(url, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'Authorization': `Bearer ${apiKey}`,
+              },
+              body: JSON.stringify({
+                model,
+                temperature: 0.2,
+                top_p: 1,
+                // Higher limit so short answers don't get cut off; model may still cap this.
+                max_tokens: 1024,
+                stream: false,
+                // Some NVIDIA-hosted models support reasoning fields; harmless for others.
+                reasoning_effort: 'medium',
+                messages: [
+                  { role: 'system', content: systemPrompt },
+                  { role: 'user', content: userPrompt },
+                ],
+              }),
+            });
 
-              return { ok: res.ok, status: res.status, statusText: res.statusText, text, data, url };
+            const text = await res.text();
+            let data;
+            try { data = JSON.parse(text); } catch { data = null; }
+
+            if (!res.ok) {
+              const lastErr = `NVIDIA API request failed: ${res.status} ${res.statusText}\nURL: ${url}\n${text}`;
+              await postOrUpdateComment(lastErr);
+              core.setFailed(lastErr);
+              return;
             }
 
-            const modelsToTry = [primaryModel, ...fallbackModels].filter((v, i, a) => v && a.indexOf(v) === i);
+            // Try multiple places where providers may return content
+            const content =
+              data?.choices?.[0]?.message?.content ??
+              data?.choices?.[0]?.delta?.content ??
+              data?.choices?.[0]?.text ??
+              '';
 
-            let chosenModel = null;
-            let review = null;
-            let lastErr = null;
-
-            for (const m of modelsToTry) {
-              core.info(`Trying NVIDIA model: ${m}`);
-              const r = await callModel(m);
-
-              if (r.ok) {
-                const content = r.data?.choices?.[0]?.message?.content?.trim();
-                if (content) {
-                  chosenModel = m;
-                  review = content;
-                  break;
-                }
-                lastErr = `Model ${m} returned empty content.`;
-                continue;
-              }
-
-              // If EOL / gone, try next model
-              if (r.status === 410) {
-                core.warning(`Model ${m} unavailable (410). Trying next.`);
-                lastErr = `Model ${m} unavailable (410).`;
-                continue;
-              }
-
-              // For 404/401/403 etc, fail fast with more context
-              lastErr = `NVIDIA API request failed for model ${m}: ${r.status} ${r.statusText}\nURL: ${r.url}\n${r.text}`;
-              break;
-            }
+            const review = (content || '').trim();
 
             if (!review) {
-              // Post a helpful comment to the PR so it's visible without opening logs
-              const marker = '<!-- ai-pr-review:nvidia -->';
-              const failBody = [
-                marker,
-                '## AI Code Review',
-                '',
-                `❌ Failed to generate AI review.` ,
-                '',
-                '### Details',
-                '```',
-                (lastErr || 'Unknown error'),
-                '```',
-                '',
-                '### How to fix',
-                '- Ensure `NVIDIA_API_KEY` secret is present.',
-                '- Set repository variable `NVIDIA_MODEL` to a model you have access to (see https://build.nvidia.com/).',
-                '- Keep `NVIDIA_BASE_URL` empty unless you changed it; default is `https://integrate.api.nvidia.com/v1`.',
-              ].join('\n');
-
-              // Try to create/update comment even on failure
-              const comments = await github.paginate(github.rest.issues.listComments, {
-                owner,
-                repo,
-                issue_number: pull_number,
-                per_page: 100,
-              });
-              const existing = comments.find(c => (c.body || '').includes(marker));
-              if (existing) {
-                await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body: failBody });
-              } else {
-                await github.rest.issues.createComment({ owner, repo, issue_number: pull_number, body: failBody });
-              }
-
-              core.setFailed(lastErr || 'NVIDIA review failed for all models.');
+              // include a snippet of response for debugging (avoid dumping huge json)
+              const snippet = text.length > 2000 ? text.slice(0, 2000) + '\n...<truncated>...' : text;
+              const lastErr = `Model ${model} returned empty content. Raw response snippet:\n${snippet}`;
+              await postOrUpdateComment(lastErr);
+              core.setFailed(`Model ${model} returned empty content.`);
               return;
             }
 
@@ -240,32 +189,40 @@ jobs:
               '',
               '---',
               `Provider: NVIDIA`,
-              `Model: \`${chosenModel}\``
+              `Model: \`${model}\``
             ].join('\n');
 
-            const comments = await github.paginate(github.rest.issues.listComments, {
-              owner,
-              repo,
-              issue_number: pull_number,
-              per_page: 100,
-            });
+            await postOrUpdateComment(null, commentBody);
 
-            const existing = comments.find(c => (c.body || '').includes(marker));
+            async function postOrUpdateComment(errorText, successBody) {
+              const marker = '<!-- ai-pr-review:nvidia -->';
+              const body = successBody || [
+                marker,
+                '## AI Code Review',
+                '',
+                '❌ Failed to generate AI review.',
+                '',
+                '### Details',
+                '```',
+                errorText || 'Unknown error',
+                '```',
+                '',
+                '### How to fix',
+                '- Ensure `NVIDIA_API_KEY` secret is present.',
+                '- Set repository variable `NVIDIA_MODEL` to a model you have access to (see https://build.nvidia.com/).',
+                '- Keep `NVIDIA_BASE_URL` empty unless you changed it; default is `https://integrate.api.nvidia.com/v1`.',
+              ].join('\n');
 
-            if (existing) {
-              await github.rest.issues.updateComment({
-                owner,
-                repo,
-                comment_id: existing.id,
-                body: commentBody,
-              });
-              core.info(`Updated existing AI review comment: ${existing.html_url}`);
-            } else {
-              const created = await github.rest.issues.createComment({
+              const comments = await github.paginate(github.rest.issues.listComments, {
                 owner,
                 repo,
                 issue_number: pull_number,
-                body: commentBody,
+                per_page: 100,
               });
-              core.info(`Created AI review comment: ${created.data.html_url}`);
+              const existing = comments.find(c => (c.body || '').includes(marker));
+              if (existing) {
+                await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+              } else {
+                await github.rest.issues.createComment({ owner, repo, issue_number: pull_number, body });
+              }
             }
