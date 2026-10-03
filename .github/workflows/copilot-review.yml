@@ -40,7 +40,7 @@ jobs:
             }
 
             const apiKey = (process.env.GOOGLE_AI_API_KEY || '').trim();
-            const model = (process.env.GEMINI_MODEL || 'gemini-1.5-flash').trim();
+            const model = (process.env.GEMINI_MODEL || 'gemini-3.8-flash').trim();
             const maxChars = parseInt((process.env.MAX_DIFF_CHARS || '120000').trim(), 10);
 
             // Best defaults:
@@ -195,12 +195,13 @@ jobs:
             ].join('\n');
 
             // Google Gemini API endpoint
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
             const res = await fetch(url, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
+                'x-goog-api-key': apiKey,
               },
               body: JSON.stringify({
                 contents: [
@@ -224,6 +225,7 @@ jobs:
             try { data = JSON.parse(text); } catch { data = null; }
 
             if (!res.ok) {
+              const safeSnippet = text.length > 2000 ? text.slice(0, 2000) + '\n...<truncated>...' : text;
               await postOrUpdateComment([
                 '## AI Code Review',
                 '',
@@ -234,8 +236,8 @@ jobs:
                 '### Details',
                 '```',
                 `Google Gemini API request failed: ${res.status} ${res.statusText}`,
-                `URL: ${url}`,
-                text,
+                `Endpoint: https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+                safeSnippet,
                 '```',
               ].join('\n'));
               core.warning('Google Gemini API request failed');
