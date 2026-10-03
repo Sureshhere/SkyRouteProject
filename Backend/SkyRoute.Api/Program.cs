@@ -73,6 +73,9 @@ using (var scope = app.Services.CreateScope())
     db.Database.Migrate();
 }
 
+// Health endpoint
+app.MapGet("/health", () => Results.Ok("Healthy"));
+
 app.Run();
 
 // Required for integration tests
