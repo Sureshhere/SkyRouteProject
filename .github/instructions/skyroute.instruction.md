@@ -1,3 +1,7 @@
+---
+applyTo: "**"
+---
+
 # SkyRoute Travel Platform - Development Instructions
 
 **Project:** SkyRoute Flight Search & Booking Platform  

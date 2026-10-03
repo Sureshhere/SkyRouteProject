@@ -1,6 +1,7 @@
 using SkyRoute.Application.Common;
 using SkyRoute.Application.DTOs.Booking;
 using SkyRoute.Application.Interfaces;
+using SkyRoute.Application.Utilities;
 using SkyRoute.Application.Validators;
 using SkyRoute.Domain.Enums;
 using SkyRoute.Domain.Models;
@@ -52,6 +53,29 @@ public class BookingService : IBookingService
             }
         }
 
+        // Layer A — validate each seat is in the cabin's valid seat list
+        var validSeats = SeatConfiguration.GetSeatsForCabin(flight.CabinClass.ToString());
+        foreach (var p in request.Passengers)
+        {
+            var normalised = p.SeatNumber.Trim().ToUpperInvariant();
+            if (!validSeats.Contains(normalised))
+                throw new AppException($"Passenger seat '{p.SeatNumber}' is not valid for cabin class '{flight.CabinClass}'.", 400);
+        }
+
+        // Layer B — validate no duplicate seats within the booking
+        var seats = request.Passengers.Select(p => p.SeatNumber.Trim().ToUpperInvariant()).ToList();
+        if (seats.Distinct().Count() != seats.Count)
+            throw new AppException("Two or more passengers cannot be assigned the same seat.", 400);
+
+        // Layer C — validate no seat is already Confirmed for this flight/date
+        var occupied = await _bookingRepository.GetOccupiedSeatsAsync(request.FlightId, request.DepartureDate);
+        foreach (var p in request.Passengers)
+        {
+            var normalised = p.SeatNumber.Trim().ToUpperInvariant();
+            if (occupied.Contains(normalised, StringComparer.OrdinalIgnoreCase))
+                throw new AppException($"Seat '{p.SeatNumber}' is already taken.", 409);
+        }
+
         // Calculate pricing using the registered strategy for this airline
         var strategy = _pricingStrategies.FirstOrDefault(s => s.ProviderName == flight.Airline.Name)
             ?? throw new AppException($"Pricing strategy not found for airline '{flight.Airline.Name}'.", 500);
@@ -82,6 +106,7 @@ public class BookingService : IBookingService
                 Email = p.Email.ToLowerInvariant(),
                 DocumentType = documentType,
                 DocumentNumber = p.DocumentNumber.ToUpperInvariant(),
+                SeatNumber = p.SeatNumber.Trim().ToUpperInvariant(),
                 PassengerIndex = i + 1,
                 CreatedAt = DateTime.UtcNow
             }).ToList()
@@ -136,7 +161,8 @@ public class BookingService : IBookingService
             {
                 FullName = p.FullName,
                 Email = p.Email,
-                DocumentType = p.DocumentType.ToString()
+                DocumentType = p.DocumentType.ToString(),
+                SeatNumber = p.SeatNumber
             }),
             BookingStatus = booking.Status.ToString(),
             CreatedAt = booking.CreatedAt

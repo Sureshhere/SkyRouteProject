@@ -2325,6 +2325,12 @@ namespace SkyRoute.Infrastructure.Data.Migrations
                     b.Property<int>("PassengerIndex")
                         .HasColumnType("int");
 
+                    b.Property<string>("SeatNumber")
+                        .IsRequired()
+                        .HasMaxLength(5)
+                        .HasDefaultValue("")
+                        .HasColumnType("nvarchar(5)");
+
                     b.HasKey("Id");
 
                     b.HasIndex("BookingId");
