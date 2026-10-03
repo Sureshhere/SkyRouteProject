@@ -138,11 +138,8 @@ jobs:
                 model,
                 temperature: 0.2,
                 top_p: 1,
-                // Higher limit so short answers don't get cut off; model may still cap this.
                 max_tokens: 1024,
                 stream: false,
-                // Some NVIDIA-hosted models support reasoning fields; harmless for others.
-                reasoning_effort: 'medium',
                 messages: [
                   { role: 'system', content: systemPrompt },
                   { role: 'user', content: userPrompt },
@@ -161,17 +158,17 @@ jobs:
               return;
             }
 
-            // Try multiple places where providers may return content
-            const content =
-              data?.choices?.[0]?.message?.content ??
-              data?.choices?.[0]?.delta?.content ??
+            // NVIDIA/openai-compatible response may carry content in different fields.
+            const msg = data?.choices?.[0]?.message;
+            const review = (
+              msg?.content ??
+              msg?.reasoning_content ??
+              msg?.reasoning ??
               data?.choices?.[0]?.text ??
-              '';
-
-            const review = (content || '').trim();
+              ''
+            ).toString().trim();
 
             if (!review) {
-              // include a snippet of response for debugging (avoid dumping huge json)
               const snippet = text.length > 2000 ? text.slice(0, 2000) + '\n...<truncated>...' : text;
               const lastErr = `Model ${model} returned empty content. Raw response snippet:\n${snippet}`;
               await postOrUpdateComment(lastErr);
