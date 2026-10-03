@@ -23,9 +23,9 @@ jobs:
         uses: actions/github-script@v7
         env:
           NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
-          NVIDIA_BASE_URL: ${{ vars.NVIDIA_BASE_URL || 'https://integrate.api.nvidia.com/v1' }}
-          NVIDIA_MODEL: ${{ vars.NVIDIA_MODEL || 'nvidia/nemotron-3-super-120b-a12b' }}
-          MAX_DIFF_CHARS: ${{ vars.AI_REVIEW_MAX_DIFF_CHARS || '120000' }}
+          NVIDIA_BASE_URL: ${{ vars.NVIDIA_BASE_URL }}
+          NVIDIA_MODEL: ${{ vars.NVIDIA_MODEL }}
+          MAX_DIFF_CHARS: ${{ vars.AI_REVIEW_MAX_DIFF_CHARS }}
           AI_REVIEW_INCLUDE_EXTENSIONS: ${{ vars.AI_REVIEW_INCLUDE_EXTENSIONS }}
           AI_REVIEW_EXCLUDE_PATHS: ${{ vars.AI_REVIEW_EXCLUDE_PATHS }}
         with:
@@ -34,10 +34,21 @@ jobs:
             const repo = context.repo.repo;
             const pull_number = context.payload.pull_request.number;
 
+            // Defaults (GitHub expressions like ${{ vars.X || 'default' }} are NOT supported)
+            const apiKey = (process.env.NVIDIA_API_KEY || '').trim();
+            const baseUrl = (process.env.NVIDIA_BASE_URL || 'https://integrate.api.nvidia.com/v1').replace(/\/+$/, '');
+            const model = (process.env.NVIDIA_MODEL || 'nvidia/nemotron-3-super-120b-a12b').trim();
+            const maxChars = parseInt((process.env.MAX_DIFF_CHARS || '120000').trim(), 10);
+
+            if (!apiKey) {
+              core.setFailed('Missing secret NVIDIA_API_KEY. Add it in GitHub repo Settings → Secrets and variables → Actions.');
+              return;
+            }
+
             // ----- 1) Gather PR metadata
             const pr = await github.rest.pulls.get({ owner, repo, pull_number });
             const title = pr.data.title || '';
-            const body = pr.data.body || '';
+            const prBody = pr.data.body || '';
             const base = pr.data.base?.ref;
             const head = pr.data.head?.ref;
 
@@ -80,11 +91,8 @@ jobs:
                 status: f.status,
                 additions: f.additions,
                 deletions: f.deletions,
-                changes: f.changes,
                 patch: f.patch || ''
               }));
-
-            const maxChars = parseInt(process.env.MAX_DIFF_CHARS || '120000', 10);
 
             let diffText = '';
             for (const f of selected) {
@@ -98,21 +106,11 @@ jobs:
             }
 
             // ----- 3) Call NVIDIA (OpenAI-compatible)
-            const apiKey = process.env.NVIDIA_API_KEY;
-            if (!apiKey) {
-              core.setFailed('Missing secret NVIDIA_API_KEY. Add it in GitHub repo Settings → Secrets and variables → Actions.');
-              return;
-            }
-
-            const baseUrl = (process.env.NVIDIA_BASE_URL || 'https://integrate.api.nvidia.com/v1').replace(/\/+$/, '');
-            const model = (process.env.NVIDIA_MODEL || 'nvidia/nemotron-3-super-120b-a12b').trim();
-
             const systemPrompt = [
               'You are a senior software engineer doing a pull request review.',
               'Give actionable feedback, be concise, and focus on correctness, security, performance, tests, and maintainability.',
               'If everything looks good, say so briefly.',
-              'Output markdown with headings and bullet points.',
-              'Do NOT mention you are an AI unless asked.'
+              'Output markdown with headings and bullet points.'
             ].join(' ');
 
             const userPrompt = [
@@ -121,7 +119,7 @@ jobs:
               `Base: ${base}  Head: ${head}`,
               '',
               'PR description:',
-              body || '(empty)',
+              prBody || '(empty)',
               '',
               'Changed files + patch:',
               diffText || '(no diff found)'
@@ -169,7 +167,7 @@ jobs:
               '',
               '---',
               `Provider: NVIDIA`,
-              `Model: \\`${model}\\``,
+              `Model: \`${model}\``
             ].join('\n');
 
             const comments = await github.paginate(github.rest.issues.listComments, {
