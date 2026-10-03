@@ -3,13 +3,14 @@ name: AI PR Review (NVIDIA)
 on:
   pull_request:
     types: [opened, reopened, ready_for_review, synchronize]
+  workflow_dispatch:
 
 permissions:
   contents: read
   pull-requests: write
 
 concurrency:
-  group: ai-pr-review-${{ github.event.pull_request.number }}
+  group: ai-pr-review-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: true
 
 jobs:
@@ -31,7 +32,13 @@ jobs:
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
-            const pull_number = context.payload.pull_request.number;
+
+            // Support both pull_request event and manual workflow_dispatch
+            const pull_number = context.payload.pull_request?.number;
+            if (!pull_number) {
+              core.warning('No pull_request found in event payload. This workflow is intended to run on pull_request events.');
+              return;
+            }
 
             const apiKey = (process.env.NVIDIA_API_KEY || '').trim();
             const baseUrl = (process.env.NVIDIA_BASE_URL || 'https://integrate.api.nvidia.com/v1').replace(/\/+$/, '');
@@ -64,11 +71,17 @@ jobs:
               }
             }
 
+            // Diagnostic ping so you always see *some* comment when it runs
+            // (helps when people think it didn't post because it updates the same comment)
+            const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+
             if (!apiKey) {
               await postOrUpdateComment([
                 '## AI Code Review',
                 '',
                 '⚠️ AI review could not be generated (non-blocking).',
+                '',
+                `Workflow run: ${runUrl}`,
                 '',
                 '### Details',
                 '```',
@@ -144,15 +157,14 @@ jobs:
                 '',
                 '⚠️ Nothing to review (non-blocking).',
                 '',
+                `Workflow run: ${runUrl}`,
+                '',
                 'No textual diff hunks were found (all files may be binary/too large/excluded).',
               ].join('\n'));
               return;
             }
 
             // ----- 3) Call NVIDIA (OpenAI-compatible)
-            // IMPORTANT: We require two sections:
-            // - Findings (diff-grounded): MUST cite file names from the diff and MUST NOT speculate.
-            // - Risks to validate: allowed to suggest checks, but must be phrased as validation questions.
             const systemPrompt = [
               'You are a senior software engineer doing a pull request review.',
               'Review ONLY the provided diff hunks. You do NOT have access to the full repository.',
@@ -219,6 +231,8 @@ jobs:
                 '',
                 '⚠️ AI review could not be generated (non-blocking).',
                 '',
+                `Workflow run: ${runUrl}`,
+                '',
                 '### Details',
                 '```',
                 `NVIDIA API request failed: ${res.status} ${res.statusText}`,
@@ -247,6 +261,8 @@ jobs:
                 '',
                 '⚠️ AI review could not be generated (non-blocking).',
                 '',
+                `Workflow run: ${runUrl}`,
+                '',
                 '### Details',
                 '```',
                 `Model ${model} returned empty content. Raw response snippet:`,
@@ -267,6 +283,7 @@ jobs:
               review,
               '',
               '---',
+              `Workflow run: ${runUrl}`,
               `Provider: NVIDIA`,
               `Model: \`${model}\``
             ].join('\n');
