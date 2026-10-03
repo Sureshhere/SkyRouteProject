@@ -38,9 +38,15 @@ jobs:
             const model = (process.env.NVIDIA_MODEL || 'openai/gpt-oss-20b').trim();
             const maxChars = parseInt((process.env.MAX_DIFF_CHARS || '120000').trim(), 10);
 
+            // Defaults: non-blocking workflow + focus on code files.
+            // Configure via repo variables if you want different behavior.
+            const defaultExcludePaths = ['.github/', 'dist/', 'build/', 'node_modules/'];
+            const defaultIncludeExtensions = ['.cs', '.ts', '.tsx', '.js', '.jsx', '.py', '.java', '.kt', '.go', '.rs', '.cpp', '.h', '.hpp', '.c', '.yaml', '.yml', '.json', '.md'];
+
             if (!apiKey) {
-              core.setFailed('Missing secret NVIDIA_API_KEY. Add it in GitHub repo Settings → Secrets and variables → Actions.');
-              return;
+              await postOrUpdateComment('Missing secret NVIDIA_API_KEY. Add it in GitHub repo Settings → Secrets and variables → Actions.');
+              core.warning('Missing secret NVIDIA_API_KEY');
+              return; // non-blocking
             }
 
             // ----- 1) Gather PR metadata
@@ -58,16 +64,16 @@ jobs:
               per_page: 100,
             });
 
-            const includeExtensions = (process.env.AI_REVIEW_INCLUDE_EXTENSIONS || '').trim();
-            const excludePaths = (process.env.AI_REVIEW_EXCLUDE_PATHS || '').trim();
+            const includeExtensionsVar = (process.env.AI_REVIEW_INCLUDE_EXTENSIONS || '').trim();
+            const excludePathsVar = (process.env.AI_REVIEW_EXCLUDE_PATHS || '').trim();
 
-            const includeSet = includeExtensions
-              ? new Set(includeExtensions.split(',').map(s => s.trim()).filter(Boolean))
-              : null;
+            const includeSet = includeExtensionsVar
+              ? new Set(includeExtensionsVar.split(',').map(s => s.trim()).filter(Boolean))
+              : new Set(defaultIncludeExtensions);
 
-            const excludeMatchers = excludePaths
-              ? excludePaths.split(',').map(s => s.trim()).filter(Boolean)
-              : [];
+            const excludeMatchers = excludePathsVar
+              ? excludePathsVar.split(',').map(s => s.trim()).filter(Boolean)
+              : defaultExcludePaths;
 
             function isExcluded(filename) {
               return excludeMatchers.some(m => filename.startsWith(m));
@@ -78,12 +84,11 @@ jobs:
               return idx === -1 ? '' : filename.slice(idx);
             }
 
+            // Select files with patch only (skip binaries/too-large without patch)
             const selected = files
+              .filter(f => !!f.patch)
               .filter(f => !isExcluded(f.filename))
-              .filter(f => {
-                if (!includeSet) return true;
-                return includeSet.has(extOf(f.filename));
-              })
+              .filter(f => includeSet.has(extOf(f.filename)))
               .map(f => ({
                 filename: f.filename,
                 status: f.status,
@@ -95,7 +100,7 @@ jobs:
             let diffText = '';
             for (const f of selected) {
               const header = `\n\n### ${f.filename} (${f.status}, +${f.additions}/-${f.deletions})\n`;
-              const patch = f.patch ? `\n${f.patch}\n` : '\n(No patch available — likely binary or too large)\n';
+              const patch = `\n${f.patch}\n`;
               if ((diffText.length + header.length + patch.length) > maxChars) {
                 diffText += `\n\n...diff truncated at ~${maxChars} characters...`;
                 break;
@@ -103,13 +108,28 @@ jobs:
               diffText += header + patch;
             }
 
+            if (!diffText.trim()) {
+              await postOrUpdateComment('No textual diff hunks found to review (all files may be binary or excluded).');
+              return; // non-blocking
+            }
+
             // ----- 3) Call NVIDIA (OpenAI-compatible)
+            // This model often returns `message.reasoning` with `message.content=null`.
+            // We extract a clean "final" review by instructing the model to output only markdown.
             const systemPrompt = [
               'You are a senior software engineer doing a pull request review.',
-              'Give actionable feedback, be concise, and focus on correctness, security, performance, tests, and maintainability.',
-              'If everything looks good, say so briefly.',
-              'Output markdown with headings and bullet points.',
-              'Return the review as normal text in message.content.'
+              'Write a concise, actionable review of the changes.',
+              'Focus on: correctness, security, performance, tests, maintainability.',
+              'Output ONLY markdown (no preamble, no meta commentary, no chain-of-thought).',
+              'Use this structure exactly:',
+              '## Summary',
+              '- ...',
+              '## Must fix (blocking)',
+              '- ... (or "- None")',
+              '## Suggestions (non-blocking)',
+              '- ... (or "- None")',
+              '## Tests',
+              '- ... (or "- None")'
             ].join(' ');
 
             const userPrompt = [
@@ -120,12 +140,11 @@ jobs:
               'PR description:',
               prBody || '(empty)',
               '',
-              'Changed files + patch:',
-              diffText || '(no diff found)'
+              'Diff:',
+              diffText
             ].join('\n');
 
             const url = `${baseUrl}/chat/completions`;
-            core.info(`Calling NVIDIA endpoint: ${url}`);
 
             const res = await fetch(url, {
               method: 'POST',
@@ -138,8 +157,10 @@ jobs:
                 model,
                 temperature: 0.2,
                 top_p: 1,
-                max_tokens: 1024,
+                max_tokens: 900,
                 stream: false,
+                // Some NVIDIA models may support it; safe if ignored.
+                reasoning_effort: 'low',
                 messages: [
                   { role: 'system', content: systemPrompt },
                   { role: 'user', content: userPrompt },
@@ -152,15 +173,13 @@ jobs:
             try { data = JSON.parse(text); } catch { data = null; }
 
             if (!res.ok) {
-              const lastErr = `NVIDIA API request failed: ${res.status} ${res.statusText}\nURL: ${url}\n${text}`;
-              await postOrUpdateComment(lastErr);
-              core.setFailed(lastErr);
-              return;
+              await postOrUpdateComment(`NVIDIA API request failed: ${res.status} ${res.statusText}\nURL: ${url}\n${text}`);
+              core.warning('NVIDIA API request failed');
+              return; // non-blocking
             }
 
-            // NVIDIA/openai-compatible response may carry content in different fields.
             const msg = data?.choices?.[0]?.message;
-            const review = (
+            let review = (
               msg?.content ??
               msg?.reasoning_content ??
               msg?.reasoning ??
@@ -170,13 +189,15 @@ jobs:
 
             if (!review) {
               const snippet = text.length > 2000 ? text.slice(0, 2000) + '\n...<truncated>...' : text;
-              const lastErr = `Model ${model} returned empty content. Raw response snippet:\n${snippet}`;
-              await postOrUpdateComment(lastErr);
-              core.setFailed(`Model ${model} returned empty content.`);
-              return;
+              await postOrUpdateComment(`Model ${model} returned empty content. Raw response snippet:\n${snippet}`);
+              return; // non-blocking
             }
 
-            // ----- 4) Post (or update) a PR comment
+            // Cleanup: remove common "thinking" preambles if present
+            review = review
+              .replace(/^\s*(We need to review\s+PR\.?\s*)/i, '')
+              .trim();
+
             const marker = '<!-- ai-pr-review:nvidia -->';
             const commentBody = [
               marker,
@@ -197,7 +218,7 @@ jobs:
                 marker,
                 '## AI Code Review',
                 '',
-                '❌ Failed to generate AI review.',
+                '⚠️ AI review could not be generated (non-blocking).',
                 '',
                 '### Details',
                 '```',
