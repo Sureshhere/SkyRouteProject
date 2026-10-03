@@ -1,43 +1,200 @@
-name: Copilot Code Review
+name: AI PR Review (NVIDIA Nemotron)
 
 on:
   pull_request:
     types: [opened, reopened, ready_for_review, synchronize]
 
+# Needed to read diffs and post a PR comment
 permissions:
-  pull-requests: write
   contents: read
+  pull-requests: write
+
+concurrency:
+  group: ai-pr-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
-  request-copilot-review:
+  ai_review:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+
     steps:
-      - name: Request Copilot as reviewer
+      - name: Generate AI review comment (NVIDIA)
         uses: actions/github-script@v7
+        env:
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+          NVIDIA_BASE_URL: ${{ vars.NVIDIA_BASE_URL || 'https://integrate.api.nvidia.com/v1' }}
+          NVIDIA_MODEL: ${{ vars.NVIDIA_MODEL || 'nvidia/nemotron-3-super-120b-a12b' }}
+          MAX_DIFF_CHARS: ${{ vars.AI_REVIEW_MAX_DIFF_CHARS || '120000' }}
+          AI_REVIEW_INCLUDE_EXTENSIONS: ${{ vars.AI_REVIEW_INCLUDE_EXTENSIONS }}
+          AI_REVIEW_EXCLUDE_PATHS: ${{ vars.AI_REVIEW_EXCLUDE_PATHS }}
         with:
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const pull_number = context.payload.pull_request.number;
 
-            // Some orgs use different slugs; try both.
-            const candidates = ['copilot', 'github-copilot'];
+            // ----- 1) Gather PR metadata
+            const pr = await github.rest.pulls.get({ owner, repo, pull_number });
+            const title = pr.data.title || '';
+            const body = pr.data.body || '';
+            const base = pr.data.base?.ref;
+            const head = pr.data.head?.ref;
 
-            let lastError = null;
-            for (const reviewer of candidates) {
-              try {
-                await github.rest.pulls.requestReviewers({
-                  owner,
-                  repo,
-                  pull_number,
-                  reviewers: [reviewer],
-                });
-                core.info(`Requested reviewer: ${reviewer}`);
-                return;
-              } catch (e) {
-                lastError = e;
-                core.warning(`Failed requesting ${reviewer}: ${e.message}`);
-              }
+            // ----- 2) Gather PR files and patch (diff hunks)
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner,
+              repo,
+              pull_number,
+              per_page: 100,
+            });
+
+            const includeExtensions = (process.env.AI_REVIEW_INCLUDE_EXTENSIONS || '').trim();
+            const excludePaths = (process.env.AI_REVIEW_EXCLUDE_PATHS || '').trim();
+
+            const includeSet = includeExtensions
+              ? new Set(includeExtensions.split(',').map(s => s.trim()).filter(Boolean))
+              : null;
+
+            const excludeMatchers = excludePaths
+              ? excludePaths.split(',').map(s => s.trim()).filter(Boolean)
+              : [];
+
+            function isExcluded(filename) {
+              return excludeMatchers.some(m => filename.startsWith(m));
             }
 
-            throw new Error(`Could not request Copilot reviewer. Last error: ${lastError?.message ?? 'unknown'}`);
+            function extOf(filename) {
+              const idx = filename.lastIndexOf('.');
+              return idx === -1 ? '' : filename.slice(idx);
+            }
+
+            const selected = files
+              .filter(f => !isExcluded(f.filename))
+              .filter(f => {
+                if (!includeSet) return true;
+                return includeSet.has(extOf(f.filename));
+              })
+              .map(f => ({
+                filename: f.filename,
+                status: f.status,
+                additions: f.additions,
+                deletions: f.deletions,
+                changes: f.changes,
+                patch: f.patch || ''
+              }));
+
+            const maxChars = parseInt(process.env.MAX_DIFF_CHARS || '120000', 10);
+
+            let diffText = '';
+            for (const f of selected) {
+              const header = `\n\n### ${f.filename} (${f.status}, +${f.additions}/-${f.deletions})\n`;
+              const patch = f.patch ? `\n${f.patch}\n` : '\n(No patch available — likely binary or too large)\n';
+              if ((diffText.length + header.length + patch.length) > maxChars) {
+                diffText += `\n\n...diff truncated at ~${maxChars} characters...`;
+                break;
+              }
+              diffText += header + patch;
+            }
+
+            // ----- 3) Call NVIDIA (OpenAI-compatible)
+            const apiKey = process.env.NVIDIA_API_KEY;
+            if (!apiKey) {
+              core.setFailed('Missing secret NVIDIA_API_KEY. Add it in GitHub repo Settings → Secrets and variables → Actions.');
+              return;
+            }
+
+            const baseUrl = (process.env.NVIDIA_BASE_URL || 'https://integrate.api.nvidia.com/v1').replace(/\/+$/, '');
+            const model = (process.env.NVIDIA_MODEL || 'nvidia/nemotron-3-super-120b-a12b').trim();
+
+            const systemPrompt = [
+              'You are a senior software engineer doing a pull request review.',
+              'Give actionable feedback, be concise, and focus on correctness, security, performance, tests, and maintainability.',
+              'If everything looks good, say so briefly.',
+              'Output markdown with headings and bullet points.',
+              'Do NOT mention you are an AI unless asked.'
+            ].join(' ');
+
+            const userPrompt = [
+              `Repo: ${owner}/${repo}`,
+              `PR #${pull_number}: ${title}`,
+              `Base: ${base}  Head: ${head}`,
+              '',
+              'PR description:',
+              body || '(empty)',
+              '',
+              'Changed files + patch:',
+              diffText || '(no diff found)'
+            ].join('\n');
+
+            const res = await fetch(`${baseUrl}/chat/completions`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`,
+              },
+              body: JSON.stringify({
+                model,
+                temperature: 0.2,
+                top_p: 1,
+                max_tokens: 900,
+                stream: false,
+                messages: [
+                  { role: 'system', content: systemPrompt },
+                  { role: 'user', content: userPrompt },
+                ],
+              }),
+            });
+
+            if (!res.ok) {
+              const errText = await res.text();
+              core.setFailed(`NVIDIA API request failed: ${res.status} ${res.statusText}\n${errText}`);
+              return;
+            }
+
+            const data = await res.json();
+            const review = data?.choices?.[0]?.message?.content?.trim();
+            if (!review) {
+              core.setFailed('NVIDIA returned empty review content.');
+              return;
+            }
+
+            // ----- 4) Post (or update) a PR comment
+            const marker = '<!-- ai-pr-review:nvidia -->';
+            const commentBody = [
+              marker,
+              '## AI Code Review',
+              '',
+              review,
+              '',
+              '---',
+              `Provider: NVIDIA`,
+              `Model: \\`${model}\\``,
+            ].join('\n');
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number: pull_number,
+              per_page: 100,
+            });
+
+            const existing = comments.find(c => (c.body || '').includes(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body: commentBody,
+              });
+              core.info(`Updated existing AI review comment: ${existing.html_url}`);
+            } else {
+              const created = await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: pull_number,
+                body: commentBody,
+              });
+              core.info(`Created AI review comment: ${created.data.html_url}`);
+            }
