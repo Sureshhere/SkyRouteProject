@@ -1,12 +1,16 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
+using Prometheus;
 using SkyRoute.Infrastructure.Configurations;
+using SkyRoute.Api.Observability;
+using SkyRoute.Application.Interfaces;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // ── Services ──────────────────────────────────────────────────────────────────
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSingleton<ISkyRouteMetrics, PrometheusSkyRouteMetrics>();
 
 // Swagger with JWT support
 builder.Services.AddSwaggerGen(options =>
@@ -62,9 +66,11 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseCors("AllowFrontend");
+app.UseHttpMetrics();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+app.MapMetrics();
 
 // ── Auto-migrate and seed on startup ─────────────────────────────────────────
 using (var scope = app.Services.CreateScope())

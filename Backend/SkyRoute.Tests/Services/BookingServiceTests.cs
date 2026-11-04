@@ -15,6 +15,7 @@ public class BookingServiceTests
 {
     private readonly Mock<IBookingRepository> _bookingRepoMock = new();
     private readonly Mock<IFlightRepository> _flightRepoMock = new();
+    private readonly Mock<ISkyRouteMetrics> _metricsMock = new();
     private readonly List<IFlightPricingStrategy> _strategies =
     [
         new GlobalAirPricingStrategy(),
@@ -22,7 +23,7 @@ public class BookingServiceTests
     ];
 
     private BookingService CreateService() =>
-        new(_bookingRepoMock.Object, _flightRepoMock.Object, _strategies);
+        new(_bookingRepoMock.Object, _flightRepoMock.Object, _strategies, _metricsMock.Object);
 
     private static Flight MakeFlight(string airlineName, string originCountry, string destCountry) => new()
     {
